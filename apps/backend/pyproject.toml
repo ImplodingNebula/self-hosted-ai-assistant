@@ -56,7 +56,7 @@ dependencies = [
     # asymmetric algorithms - without it PyJWT can verify HMAC only, which is
     # exactly the family this project refuses to accept.
     "pyjwt[crypto]>=2.10",
-    "mcp>=1.28,<2",
+    "mcp>=1.28,<3",
     # S3/MinIO object storage behind the StorageBackend seam. aiobotocore, not
     # boto3: every other backend seam is async, and a blocking S3 call inside a
     # request handler would stall every concurrent SSE stream. It wraps the same
