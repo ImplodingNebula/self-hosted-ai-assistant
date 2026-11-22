@@ -1,0 +1,9 @@
+# Code owners are auto-requested for review on matching paths.
+# Fill in your GitHub handle (and teammates') once the repo is on GitHub.
+
+# * @your-github-username
+
+# Example per-area ownership once the team grows:
+# /apps/backend/   @your-github-username
+# /apps/frontend/  @your-github-username
+# /services/mcp-chassis/  @your-github-username

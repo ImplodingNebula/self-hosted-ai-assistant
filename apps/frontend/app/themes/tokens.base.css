@@ -1,0 +1,198 @@
+/* =====================================================================
+   Base token sheet - the layer every theme sits on.
+
+   This holds the parts of the design system that are the same for all
+   themes: the tier-3 component tokens (--c-*) derived from the tier-2
+   semantic roles (--s-*), the default shape and motion tokens, the UI
+   font tokens (Geist by default, served via next/font), and the
+   reduced-motion blanket override.
+
+   A theme file (themes/<name>.css) fully defines tier 1 (--p-*) and
+   tier 2 (--s-*) and overrides tier 3 only where it wants a different
+   look. Anything a theme leaves alone falls back to the derivations
+   here, so a new theme is mostly a semantic-role map.
+
+   Mirrors sections 5-6 of the prototype skeleton
+   (docs/design/prototypes/porcelain.html): the tier-3 derivations,
+   shape/motion defaults, and the reduced-motion law. Component-level
+   state styling (the ambient thinking tell, per-part rules) lands with
+   the components, not here.
+   ===================================================================== */
+
+:root {
+  /* ---- tier 3: component tokens, derived from tier 2 ----
+     Themes override these sparsely; the defaults keep every part
+     legible on any semantic-role map. */
+  --c-bubble-user-bg: color-mix(in srgb, var(--s-accent) 12%, var(--s-bg-panel));
+  --c-bubble-user-fg: var(--s-text);
+  --c-thinking-bg: color-mix(in srgb, var(--s-bg-panel) 60%, var(--s-bg-app));
+  /* The quote chip's ground: the user bubble's pane, a touch more of the accent,
+     so a quote reads as part of the question it heads. */
+  --c-quote-bg: color-mix(in srgb, var(--s-accent) 8%, var(--c-bubble-user-bg));
+  /* The band as the way back to its source: deeper under the pointer,
+     deeper still under the press. */
+  --c-quote-bg-hover: color-mix(in srgb, var(--s-accent) 16%, var(--c-bubble-user-bg));
+  --c-quote-bg-active: color-mix(in srgb, var(--s-accent) 24%, var(--c-bubble-user-bg));
+  /* The light on a quoted passage at its hold: a wash and an underline in
+     one colour, so it is not mistaken for a selection. */
+  --c-passage-light: color-mix(in srgb, var(--s-accent) 34%, transparent);
+  --c-thinking-rule: var(--s-accent);
+  --c-tool-bg: var(--s-bg-raised);
+  --c-composer-bg: var(--s-bg-raised);
+  --c-composer-placeholder: var(--s-text-3);
+  --c-sidebar-bg: var(--s-bg-panel);
+  --c-topbar-bg: color-mix(in srgb, var(--s-bg-app) 85%, transparent);
+  /* Floating panels (menus, popovers, the jump button): the raised surface
+     by default; a theme whose floaters frost re-points this to the fill its
+     blur needs (aurora). */
+  --c-float-bg: var(--s-bg-raised);
+  /* The sign-in card: the panel by default; a theme that sets the card on
+     its own sky re-points both (aurora gives it the composer's pane). */
+  --c-login-bg: var(--s-bg-panel);
+  --c-login-border: var(--s-border);
+  --c-citation-bg: var(--s-bg-panel);
+  --c-code-bg: var(--s-bg-inset);
+  --c-code-fg: var(--s-text);
+  /* Rendered-markdown tables in the answer: the header band and the cell
+     grid. Split from the raw --s tokens so a theme whose inset tone recedes
+     into its surfaces (aurora's glass) can lift them without touching every
+     other inset consumer. */
+  --c-table-head-bg: var(--s-bg-inset);
+  --c-table-border: var(--s-border);
+  /* Backdrop filter for floating menus/popovers. `none` by default; glass
+     themes (Aurora) override it so a translucent panel fill does not let the
+     content behind it bleed through. */
+  --c-menu-backdrop: none;
+  /* Inline code in an answer: the inset by default; a theme whose inset
+     recedes into its surfaces lifts it (aurora puts the chip on the panel). */
+  --c-inline-code-bg: var(--s-bg-inset);
+  /* Syntax colour in a code block: comment, keyword, string, number,
+     function - the roles by default, so every theme's blocks read. */
+  --c-code-com: var(--s-text-3);
+  --c-code-key: var(--s-accent);
+  --c-code-str: var(--s-ok);
+  --c-code-num: var(--s-warn);
+  --c-code-fn: var(--s-info);
+  /* A card's fill: the panel by default; aurora's lit panes re-point it. */
+  --c-card-bg: var(--s-bg-panel);
+  /* The pending-action card's fill: a wash of the confirm colour. */
+  --c-confirm-bg: color-mix(in srgb, var(--c-step-confirm) 6%, var(--s-bg-panel));
+  /* Step colours: what kind of work a row of a turn is (the rail glyph, and
+     on aurora the sky). Derived from the roles, so a theme restyles the rail
+     by re-pointing these alone. */
+  --c-step-thought: var(--s-accent);
+  --c-step-tool: var(--s-text-2);
+  --c-step-confirm: var(--s-warn);
+  --c-step-answer: var(--s-text-2);
+  --c-step-error: var(--s-danger);
+
+  /* ---- shape (default geometry; themes re-point per their catalog entry) ---- */
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 14px;
+  --radius-bubble: 14px;
+  --clip-panel: none;
+  /* Composer auto-grow ceiling: the textarea grows with its content up to
+     here (about 10 lines, but never past 40vh on a short viewport), then
+     scrolls inside. The dossier's composer shape caps at 40vh; this keeps
+     that intent while stopping the box eating a tall screen. */
+  --composer-max-h: min(40vh, 15rem);
+
+  /* ---- the timeline rail (the turn's grid: time | glyph | body) ----
+     The reading column is as wide as the composer; the rail on the left and
+     a question's clock time on the right hang OUTSIDE it in equal gutters,
+     so the composer and the answer share one left edge. A theme without a
+     rail zeroes the two widths. */
+  --rail-time: 40px;
+  --rail-glyph: 20px;
+  --rail-gap: 12px;
+  --step-gap: 14px;
+  --col: 50rem;
+  --gutter: calc(var(--rail-time) + var(--rail-glyph) + 2 * var(--rail-gap));
+
+  /* ---- motion (durations, easings; ambient loops run 4s or slower) ---- */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+  --ease-standard: cubic-bezier(.4, 0, .2, 1);
+  --ease-entrance: cubic-bezier(.16, 1, .3, 1);
+  --ease-spring: cubic-bezier(.34, 1.4, .64, 1);
+
+  /* ---- type (Geist via next/font; a theme may re-point at a system stack) ---- */
+  --font-ui: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-prose: var(--font-ui);
+  --font-mono: var(--font-geist-mono), ui-monospace, "Cascadia Code", Consolas, monospace;
+
+  /* ---- type scale (content-first hierarchy) ----
+     Owner decision 2026-07-24 (recorded in docs/design/DESIGN.md): the
+     thread reads a notch ABOVE every piece of chrome, so the conversation
+     is unmistakably the foreground and the sidebar / topbar / tool lines
+     recede. Hierarchy by discrete steps, never size explosions - this
+     refines the dossier's flatter "everything 12-15px" scale where they
+     conflict. Every chat size below references one of these tokens rather
+     than a sprinkled literal, so the whole scale moves from one place. */
+  --text-display: 20px; /* the one display size: empty-state headline */
+  --text-heading: 17px; /* page-section headings on management surfaces
+                           (added 2026-07-26: the chat surface needed no
+                           section headers, the integrations page does -
+                           title-size headings read level with card text) */
+  --text-body: 15.5px;  /* thread prose + user bubbles (the reading size) */
+  --text-body-line: 1.75; /* comfortable measure for the bumped body */
+  /* The answer column alone: the body size by default; a theme that sets
+     the answer in another face sizes it here without moving the shell
+     (aurora's serif runs 16.5px / 1.68 on a 68ch measure). */
+  --text-prose: var(--text-body);
+  --text-prose-line: var(--text-body-line);
+  --prose-measure: none;
+  --text-title: 14px;   /* topbar title, sidebar brand (carried at 600) */
+  --text-label: 13px;   /* interactive chrome: convo rows, new-chat, buttons */
+  --text-meta: 12px;    /* quiet chrome: tool lines, citations, notices, meta */
+  --text-micro: 11px;   /* micro chrome: section labels, hints, footer, badges */
+}
+
+/* ---- focus ring: one shared rule so every themed page is born compliant ----
+   Drawn with outline (not box-shadow) so a theme's clip-path cannot clip it;
+   --s-focus meets the 3:1 ring floor in every theme's tokens file. */
+:focus-visible {
+  outline: 2px solid var(--s-focus);
+  outline-offset: 2px;
+}
+
+/* ---- scrollbars: one quiet treatment everywhere ----
+   scrollbar-color inherits, so setting it once on the root gives every scroll
+   surface (sidebar list, thread, composer, management pages) the same thin,
+   trackless bar. The thumb derives from the theme's tertiary text color, so
+   each theme tints it without writing its own rule. */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--s-text-3) 40%, transparent)
+    transparent;
+}
+
+/* ---- the one entrance ----
+   A thing that arrives rises 4px out of nothing (the prototypes' `enter`):
+   the sign-in card, a check sample landing, the boot's name and rail. Each
+   surface sets its own duration and delay; the keyframe is shared so every
+   arrival is the same arrival. */
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* ---- reduced motion: base-sheet law ----
+   Kept unlayered and !important so no theme (and no future flourish
+   layer) can forget it: every ambient loop and entrance transform is
+   removed, opacity-only fades effectively collapse to instant. A
+   flourish that truly needs an animation under reduced motion must
+   ship its own in-layer reset (see docs/design/IMPLEMENTATION.md). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}

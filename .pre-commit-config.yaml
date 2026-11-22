@@ -1,0 +1,41 @@
+# Pre-commit hooks for the monorepo. Install once with:  pre-commit install
+# Update pinned revs periodically with:  pre-commit autoupdate
+# Commit-message linting (Conventional Commits) runs in CI, not here.
+
+default_install_hook_types: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: check-added-large-files
+        # Blocks accidental commits of model weights / large blobs (~2 MB cap).
+        args: [--maxkb=2048]
+
+  # Python: lint + format (backend). Scoped to apps/backend.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: [--fix]
+        files: ^apps/backend/
+      - id: ruff-format
+        files: ^apps/backend/
+
+  # Frontend / config formatting (TS, JSON, YAML, MD).
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        files: ^apps/frontend/
+        additional_dependencies:
+          - prettier@3.4.2

@@ -1,0 +1,90 @@
+# Dev overlay - auto-included by `make up`. Local-development conveniences only.
+#
+# As phases land, hot-reload bind mounts go here, e.g.:
+#   backend:
+#     build: { context: ../apps/backend, target: dev }
+#     volumes: [ ../apps/backend:/app ]
+#     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--reload"]
+#   frontend:
+#     build: { context: ../apps/frontend, target: dev }
+#     volumes: [ ../apps/frontend:/app, /app/node_modules ]
+#     command: ["npm", "run", "dev"]
+
+services:
+  # Backend: dev image target + hot-reload against the mounted source. The
+  # anonymous /app/.venv volume shields the image's Linux venv from the
+  # bind-mounted host tree (which has no container-compatible .venv).
+  # The command mirrors the dev image CMD (apps/backend/Dockerfile) on
+  # purpose: this file is read from the checkout at `up` time, so the
+  # migrate-then-serve contract holds even when the local image predates it
+  # (`docker compose up` reuses already-built images; seen live as a fresh
+  # pull serving against a database with no tables). Keep the two in sync.
+  backend:
+    build:
+      target: dev
+    command:
+      [
+        "sh",
+        "-c",
+        "uv run alembic upgrade head && exec uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
+      ]
+    volumes:
+      - ../apps/backend:/app
+      - /app/.venv
+    # A cold `make rebuild` wipes the anonymous .venv volume, so `uv run`
+    # re-syncs EVERY dependency and then runs migrations before /healthz can
+    # answer - minutes on a slow/HDD bind mount. The base 20s grace marks the
+    # backend unhealthy mid-sync and fails the dependent frontend, a spurious
+    # rebuild error a second `make up` only "fixes" because the venv is cached
+    # by then. A long start_period tolerates that first cold boot; once the venv
+    # is cached the backend is healthy in seconds, so it costs nothing steady
+    # state. A real migration failure still exits the container and fails fast
+    # regardless (start_period only delays the unhealthy verdict, not a crash).
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 240s
+
+  # Worker: same dev-image + bind-mount treatment as the backend, with arq's
+  # --watch for hot-reload parity. The healthcheck needs the `uv run` prefix
+  # here because the dev image does not put the venv on PATH.
+  worker:
+    build:
+      target: dev
+    command: ["uv", "run", "arq", "app.workers.main.WorkerSettings", "--watch", "app"]
+    volumes:
+      - ../apps/backend:/app
+      - /app/.venv
+    healthcheck:
+      test: ["CMD", "uv", "run", "arq", "--check", "app.workers.main.WorkerSettings"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      # Same cold-rebuild uv re-sync as the backend (its own .venv volume), so
+      # the grace matches - the base 30s can flap on a slow first boot.
+      start_period: 180s
+
+  # Frontend: dev image target + hot-reload against the mounted source. Anonymous
+  # volumes keep the container's Linux node_modules and .next build cache from
+  # being clobbered by the bind-mounted host tree.
+  frontend:
+    build:
+      target: dev
+    volumes:
+      - ../apps/frontend:/app
+      - /app/node_modules
+      - /app/.next
+
+  # The Ollama runtime settings (OLLAMA_MAX_LOADED_MODELS, OLLAMA_KEEP_ALIVE,
+  # OLLAMA_LOAD_TIMEOUT) used to live here. They are in the BASE file now: they
+  # are operating limits rather than development conveniences, and a production
+  # layering does not read this file - which left the model server with no
+  # environment at all and its 5-minute built-in load ceiling back in force.

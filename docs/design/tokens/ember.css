@@ -1,0 +1,85 @@
+/* =====================================================================
+   Ember - theme tokens
+   Dusk and firelight: the cozy dark theme for people who find OLED
+   themes cold. Deep plum-brown base, amber-to-coral accent ramp, a low
+   amber horizon banked along the bottom 15% of the viewport (the
+   horizon itself lives in the theme-flourish layer; these are the
+   colors it draws from).
+
+   Single-mode theme: dark only. data-mode is ignored (no
+   html[data-mode] variant selectors) and there are no accent variants.
+
+   Checked contrast ratios (WCAG 2.x relative luminance; targets per
+   DESIGN.md > Accessibility):
+     text      #f3e9df on bg-app    #241a1a  14.2:1  (target 4.5)
+     text      #f3e9df on bg-panel  #2b201f  13.2:1  (target 4.5)
+     text      #f3e9df on bg-raised #332523  12.3:1  (target 4.5)
+     text-2    #c9b8ab on bg-app    #241a1a   8.8:1  (target 4.5)
+     text-2    #c9b8ab on bg-raised #332523   7.6:1  (target 4.5)
+     text-3    #8f7f74 on bg-app    #241a1a   4.4:1  (target 3.0)
+     text-3    #8f7f74 on bg-raised #332523   3.8:1  (target 3.0)
+     on-accent #2a1509 on accent    #e08d4d   6.7:1  (target 4.5)
+     on-accent #2a1509 on acc-hover #d96a4f   5.1:1  (target 4.5)
+     text on user-bubble gradient (worst stop #674430)  7.2:1 (4.5)
+     danger    #d96a4f as text on error bg    #2d1e1d  4.7:1 (4.5)
+     code fg   #ead9c6 on code bg   #1a1210  13.4:1  (target 4.5)
+     accent/focus #e08d4d on bg-app #241a1a   6.5:1  (target 3.0)
+   Note: the base sheet's white-on-danger confirm glyph fails on coral;
+   the Ember flourish layer repaints that glyph in --p-char (5.1:1).
+   ===================================================================== */
+html[data-theme="ember"] {
+  /* tier 1 - primitives */
+  --p-plum-0: #241a1a; --p-plum-1: #2b201f; --p-plum-2: #332523; --p-plum-3: #1c1414;
+  --p-cream-0: #f3e9df; --p-cream-1: #c9b8ab; --p-cream-2: #8f7f74;
+  --p-line-0: #43322e; --p-line-1: #57413b;
+  --p-amber: #e08d4d; --p-coral: #d96a4f; --p-char: #2a1509;
+  --p-ember-1: #674430; --p-ember-2: #653a30; /* user-bubble gradient stops */
+
+  /* tier 2 - semantic */
+  --s-bg-app: var(--p-plum-0);
+  --s-bg-panel: var(--p-plum-1);
+  --s-bg-raised: var(--p-plum-2);
+  --s-bg-inset: var(--p-plum-3);
+  --s-text: var(--p-cream-0);
+  --s-text-2: var(--p-cream-1);
+  --s-text-3: var(--p-cream-2);
+  --s-text-inverse: var(--p-plum-0);
+  --s-accent: var(--p-amber);
+  --s-accent-hover: var(--p-coral);
+  --s-on-accent: var(--p-char);
+  --s-info: #527797; --s-ok: #7ea06b; --s-warn: #d9a05a; --s-danger: var(--p-coral);
+  --s-border: var(--p-line-0);
+  --s-border-strong: var(--p-line-1);
+  --s-focus: var(--p-amber);
+  /* on --s-info 4.7:1; on --s-danger 3.4:1 - no single value reaches 4.5
+     on both fills (coral needs near-black ink, which drops info to 3.6:1),
+     so the info-passing value stays; the flourish layer repaints the
+     danger glyph in --p-char (5.1:1) */
+  --s-on-status: #ffffff;
+  --s-scrim: rgba(0, 0, 0, .4);
+  --s-shadow: rgba(0, 0, 0, .14);
+
+  /* tier 3 - component (sparse overrides of base derivations) */
+  --c-sidebar-bg: linear-gradient(to top,
+      color-mix(in srgb, var(--p-amber) 8%, var(--p-plum-1)), var(--p-plum-1) 30%);
+  --c-bubble-user-bg: linear-gradient(150deg, var(--p-ember-1), var(--p-ember-2) 85%);
+  --c-bubble-user-fg: var(--s-text);
+  --c-thinking-bg: color-mix(in srgb, var(--s-bg-panel) 60%, var(--s-bg-app));
+  --c-thinking-rule: var(--s-accent);
+  --c-tool-bg: var(--s-bg-raised);
+  --c-citation-bg: var(--s-bg-panel);
+  --c-code-bg: #1a1210;
+  --c-code-fg: #ead9c6;
+
+  /* shape + motion */
+  --radius-s: 6px; --radius-m: 10px; --radius-l: 14px;
+  --radius-bubble: 14px;
+  --clip-panel: none;
+  --dur-fast: 120ms; --dur-base: 200ms; --dur-slow: 320ms;
+  --ease-standard: cubic-bezier(.4,0,.2,1);
+  --ease-entrance: cubic-bezier(.16,1,.3,1);
+  --ease-spring: cubic-bezier(.34,1.4,.64,1);
+  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-prose: var(--font-ui);
+  --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+}

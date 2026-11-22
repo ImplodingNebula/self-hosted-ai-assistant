@@ -1,0 +1,113 @@
+[project]
+name = "ai-chatbot-backend"
+version = "0.1.0"
+description = "FastAPI backend for the AI Chatbot Platform."
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "httpx>=0.28",
+    "sqlmodel>=0.0.39",
+    "asyncpg>=0.31.0",
+    "alembic>=1.18.5",
+    "pyyaml>=6.0.3",
+    "qdrant-client>=1.18,<2",
+    "arq>=0.26",
+    "charset-normalizer>=3.4.9",
+    "python-multipart>=0.0.20",
+    "pypdfium2>=4.30",
+    # Office formats. Pure-Python readers with no system dependency, so the image
+    # is unchanged. Deliberately NOT docling: it would pull a torch-based layout
+    # stack (gigabytes) to read three zip-and-XML formats, which the dev tier's
+    # 4GB card and CI both pay for on every build. Revisit only if table or
+    # layout fidelity ever demands a model.
+    "python-docx>=1.1",
+    "openpyxl>=3.1",
+    "python-pptx>=1.0",
+    # OCR for scanned PDF pages. pytesseract wraps the Tesseract SYSTEM binary
+    # (installed in the image, not by pip); Pillow holds the rendered page image
+    # that pypdfium2 hands to it. Both are pure-Python wheels.
+    "pytesseract>=0.3.13",
+    "pillow>=11.0",
+    # Rich Text Format. A control-word grammar, not a markup language, and the
+    # subtleties are where a hand-rolled reader quietly goes wrong: \ucN says how
+    # many fallback characters follow each \uN escape, and keeping them turns every
+    # accented word into one with a question mark stuck to it. striprtf is BSD-3,
+    # pure Python, has no dependencies of its own, and skips the destination groups
+    # (\fonttbl, \pict) whose contents are metadata rather than text.
+    "striprtf>=0.0.32",
+    # XML that arrives inside an uploaded file is attacker-controlled, and the
+    # stdlib parser expands internal entities (a few nested declarations become
+    # gigabytes: the "billion laughs"). This refuses entity declarations outright
+    # while still accepting the ordinary <!DOCTYPE html> that every real EPUB
+    # chapter carries. PSF-2.0, pure Python, no dependencies.
+    "defusedxml>=0.7.1",
+    # AES-GCM authenticated encryption for credentials at rest (the SecretStore
+    # seam). A single, audited, widely-used primitive - not a hand-rolled cipher.
+    # It ships a manylinux wheel, so the image gains no build toolchain.
+    "cryptography>=50.0.0",
+    # JWT verification for the login id_token. Already present transitively
+    # (the mcp SDK depends on it), and DECLARED here because this codebase now
+    # imports it directly: an undeclared import is one dependency bump of an
+    # unrelated package away from vanishing, and the thing it would take with it
+    # is signature verification. The [crypto] extra is what supplies the
+    # asymmetric algorithms - without it PyJWT can verify HMAC only, which is
+    # exactly the family this project refuses to accept.
+    "pyjwt[crypto]>=2.10",
+    "mcp>=1.28,<2",
+    # S3/MinIO object storage behind the StorageBackend seam. aiobotocore, not
+    # boto3: every other backend seam is async, and a blocking S3 call inside a
+    # request handler would stall every concurrent SSE stream. It wraps the same
+    # botocore that boto3 does, so the API and the error types are the familiar
+    # ones; the major ceiling is there because aiobotocore pins a narrow
+    # botocore range and a major bump has broken that contract before.
+    "aiobotocore>=2.13,<3",
+]
+
+[dependency-groups]
+dev = [
+    "aiosqlite>=0.22.1",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    # A real S3 server for the storage contract suite. The in-process `mock_aws`
+    # decorator patches botocore's SYNC HTTP path, which aiobotocore does not
+    # use, so the tests run moto's HTTP server and point the adapter at it - the
+    # same wire path a MinIO deployment takes.
+    #
+    # `moto[s3]` plus the two packages its WSGI app needs, deliberately NOT
+    # `moto[server]`: that extra implies `moto[all]`, which drags in cfn-lint,
+    # sympy, networkx and the docker SDK to emulate services this repo will
+    # never call. They would be installed into the dev image on every rebuild.
+    "moto[s3]>=5",
+    "flask>=3",
+    "flask-cors>=6",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "ollama: needs a live Ollama server (run nightly, deselected on PR with -m 'not ollama')",
+    "ocr: needs the Tesseract OCR binary (deselected where it is not installed)",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "SIM", "C4", "D"]
+ignore = ["D100", "D104", "D107", "D203", "D213", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

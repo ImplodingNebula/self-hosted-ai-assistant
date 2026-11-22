@@ -1,0 +1,128 @@
+/* =====================================================================
+   Minimal - theme tokens
+   Mood: nothing but the conversation; for people who find personality
+   themes noisy. Pure white / pure near-black (#111), one gray ramp,
+   accent is the system blue. Paired theme: light + dark follow the OS
+   by default; the no-flash script stamps data-mode before first paint.
+
+   Minimal ships NO flourish layer. Its prototype carries only a small
+   subtractive rule set (tool trace as borderless single text lines,
+   the ambient thinking tell disabled in favor of a static label with
+   an opacity-pulsing "...", the model menu flattened to a hairline
+   border with no floating shadow, and the integrations server cards
+   flattened into hairline-separated rows); everything else is these
+   tokens.
+
+   Checked contrast (computed, WCAG 2.x relative luminance):
+     light  --s-text      #111111 on --s-bg-app  #ffffff = 18.9:1 (AA >= 4.5 pass)
+            --s-text      #111111 on --s-bg-panel #f7f7f7 = 17.6:1 (AA >= 4.5 pass)
+            --s-text-2    #555555 on --s-bg-app  #ffffff =  7.5:1 (AA >= 4.5 pass)
+            --s-text-3    #808080 on --s-bg-app  #ffffff =  3.9:1 (>= 3:1 pass)
+            --s-on-accent #ffffff on --s-accent  #0b57d0 =  6.4:1 (AA >= 4.5 pass)
+     dark   --s-text      #ededed on --s-bg-app  #111111 = 16.1:1 (AA >= 4.5 pass)
+            --s-text      #ededed on --s-bg-panel #171717 = 15.3:1 (AA >= 4.5 pass)
+            --s-text-2    #a3a3a3 on --s-bg-app  #111111 =  7.5:1 (AA >= 4.5 pass)
+            --s-text-3    #7a7a7a on --s-bg-app  #111111 =  4.4:1 (>= 3:1 pass)
+            --s-on-accent #111111 on --s-accent  #8ab4f8 =  9.0:1 (AA >= 4.5 pass)
+   Focus ring: --s-focus = accent, 6.4:1 (light) / 9.0:1 (dark) against
+   --s-bg-app - above the 3:1 ring minimum on every surface it touches.
+   Status-as-fill: white on --s-info passes 6.4:1 (light) / 5.2:1 (dark);
+   dark --s-info stays a mid blue for that reason (the accent #8ab4f8 is
+   too light to carry white glyphs).
+
+   Danger, measured surface by surface, because dark danger is the tightest
+   thing in this theme and it is read as TEXT in five places and used as a
+   FILL in one. Dark was #e5484d and left the 12px filename on a failed
+   attachment chip at 4.04:1, under the 4.5 text floor; it is now #eb6065.
+   The fill percentage was not the lever - danger on bare --s-bg-raised was
+   only 4.35:1, so even a fully transparent chip failed. The colour had to
+   move.
+     light  #d1242f on chip fill  8% over #ffffff = 4.6:1 (AA pass)
+            #d1242f on error fill 5% over #ffffff = 4.9:1 (AA pass)
+            #d1242f on --s-bg-app #ffffff         = 5.2:1 (AA pass)
+            #ffffff on #d1242f (confirm badge)    = 5.2:1 (AA pass)
+            #d1242f on menu-hover 10% over #f7f7f7 = 4.2:1 (PRE-EXISTING
+              shortfall, light only, untouched here - it predates the dark
+              fix and moving light danger would ripple the whole light ramp)
+     dark   #eb6065 on chip fill  8% over #1c1c1c = 4.7:1 (AA pass, was 4.0)
+            #eb6065 on error fill 5% over #111111 = 5.5:1 (AA pass, was 4.6)
+            #eb6065 on menu-hover 10% over #171717 = 4.9:1 (AA pass, was 4.2)
+            #eb6065 on --s-bg-app #111111         = 5.8:1 (AA pass, was 4.8)
+            #eb6065 on --s-bg-raised #1c1c1c      = 5.2:1 (AA pass, was 4.4)
+            #ffffff on #eb6065 (confirm badge)    = 3.3:1 (was 3.9:1)
+   That last line is a REGRESSION and is deliberate, because the two demands
+   are monotonic in opposite directions: every danger-as-text surface wants a
+   lighter red, the one danger-as-fill surface wants a darker one, and no
+   single value satisfies both (which is the same trade --s-on-status below
+   already records). Text won, because it is five surfaces to one and the
+   badge is a redundant glyph beside the words "Confirm" - and the badge
+   stays above the 3:1 floor. Retiring the compromise needs a per-status
+   foreground token, which is a dossier-wide change, not a theme edit.
+   ===================================================================== */
+
+html[data-theme="minimal"] {
+  /* tier 1 - primitives: one gray ramp + the system blue */
+  --p-gray-0: #ffffff; --p-gray-1: #f7f7f7; --p-gray-2: #efefef;
+  --p-gray-3: #e4e4e4; --p-gray-4: #c9c9c9; --p-gray-5: #808080;
+  --p-gray-6: #555555; --p-gray-7: #262626; --p-gray-8: #111111;
+  --p-blue: #0b57d0; --p-blue-deep: #0842a0;
+
+  /* tier 2 - semantic */
+  --s-bg-app: var(--p-gray-0);
+  --s-bg-panel: var(--p-gray-1);
+  --s-bg-raised: var(--p-gray-0);
+  --s-bg-inset: var(--p-gray-2);
+  --s-text: var(--p-gray-8);
+  --s-text-2: var(--p-gray-6);
+  --s-text-3: var(--p-gray-5);
+  --s-text-inverse: #ffffff;
+  --s-accent: var(--p-blue);
+  --s-accent-hover: var(--p-blue-deep);
+  --s-on-accent: #ffffff;
+  --s-info: #0b57d0; --s-ok: #1a7f37; --s-warn: #9a6700; --s-danger: #d1242f;
+  --s-border: var(--p-gray-3);
+  --s-border-strong: var(--p-gray-4);
+  --s-focus: var(--p-blue);
+  /* light: on --s-info 6.4:1, on --s-danger 5.2:1. Dark: 5.2:1 on info but
+     3.9:1 on danger - no single value passes both dark fills (info needs a
+     light glyph, danger a near-black one), so the light-mode winner stays. */
+  --s-on-status: #ffffff;
+  --s-scrim: rgba(0, 0, 0, .4);
+  --s-shadow: rgba(0, 0, 0, .14);
+
+  /* tier 3 - component (flat fills; the one gray ramp does everything) */
+  --c-bubble-user-bg: var(--p-gray-2);
+  --c-bubble-user-fg: var(--s-text);
+  --c-thinking-bg: transparent;
+  --c-thinking-rule: var(--s-border-strong);
+  --c-tool-bg: transparent;
+  --c-citation-bg: transparent;
+  --c-code-bg: var(--p-gray-2);
+  --c-code-fg: var(--p-gray-7);
+
+  /* shape + motion: flat 8px geometry, quick fades, no springs */
+  --radius-s: 4px; --radius-m: 8px; --radius-l: 8px;
+  --radius-bubble: 8px;
+  --clip-panel: none;
+  --dur-fast: 100ms; --dur-base: 160ms; --dur-slow: 240ms;
+  --ease-standard: cubic-bezier(.4,0,.2,1);
+  --ease-entrance: cubic-bezier(.16,1,.3,1);
+  --ease-spring: cubic-bezier(.4,0,.2,1); /* no overshoot anywhere */
+  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-prose: var(--font-ui);
+  --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+html[data-theme="minimal"][data-mode="dark"] {
+  --p-gray-0: #111111; --p-gray-1: #171717; --p-gray-2: #262626;
+  --p-gray-3: #2e2e2e; --p-gray-4: #454545; --p-gray-5: #7a7a7a;
+  --p-gray-6: #a3a3a3; --p-gray-7: #d4d4d4; --p-gray-8: #ededed;
+  --p-blue: #8ab4f8; --p-blue-deep: #a8c7fa;
+  --s-bg-raised: #1c1c1c;
+  --s-text-inverse: #111111;
+  --s-on-accent: #111111;
+  /* danger a step lighter than the #e5484d it started at: see the header's
+     measured table - the failed-chip filename needed 4.5:1 and no fill
+     percentage could get there. */
+  --s-info: #2563eb; --s-ok: #3fb950; --s-warn: #d29922; --s-danger: #eb6065;
+}

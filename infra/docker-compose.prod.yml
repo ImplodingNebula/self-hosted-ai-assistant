@@ -1,0 +1,139 @@
+# Production overlay (ROADMAP Phase 8).
+#
+#   Set DEPLOY_ENV=prod in .env and use the make targets - `make up`, `make
+#   logs`, `make db-upgrade` and the rest then read this file instead of the
+#   development override, with nothing extra to type.
+#
+#   Raw equivalent:
+#     docker compose --env-file .env -f infra/docker-compose.yml \
+#       -f infra/docker-compose.prod.yml --profile gpu up -d
+#
+# What this layer changes. Every service restarts unconditionally (always-on is
+# the point on a server, where `on-failure` would leave the stack down after a
+# host reboot), nothing publishes a host port, and one new service - Caddy -
+# takes 80 and 443 and becomes the only way in. The backing services
+# (postgres/redis/qdrant/ollama) and the app tier are reached on the internal
+# network alone.
+#
+# It composes with the model-serving profile rather than replacing it: a server
+# whose GPU lives on a remote host runs DEPLOY_ENV=prod with PROFILE=remote, and
+# neither setting knows about the other.
+#
+# A deployment that runs the reranking sidecar must ALSO pass `--profile
+# reranker` on the up command, or retrieval silently runs dense-only without
+# it. `make up` adds the profile on its own whenever RERANKER_URL names a
+# sidecar, so the two cannot drift apart.
+#
+# NOTE: `ports: !reset []` (not plain `ports: []`) is required - compose MERGES
+# port sequences across files, so an empty list would leave the base file's
+# published ports in place. `!reset` discards the inherited value entirely.
+
+services:
+  postgres:
+    restart: always
+    ports: !reset []
+  redis:
+    restart: always
+    ports: !reset []
+  qdrant:
+    restart: always
+    ports: !reset []
+  ollama-cpu:
+    restart: always
+    ports: !reset []
+  ollama-gpu:
+    restart: always
+    ports: !reset []
+  backend:
+    restart: always
+    # Caddy reaches the API over the compose network, so the host port the dev
+    # layout publishes for tooling (`make status`, curling by hand) has nothing
+    # to do here - and publishing an unauthenticated API on a server is exactly
+    # what this overlay exists to prevent. Host-side tooling that still needs
+    # the API goes through `docker compose exec`, as `make db-upgrade` does.
+    ports: !reset []
+  frontend:
+    restart: always
+    # Same: the browser reaches the UI through Caddy, on 443.
+    ports: !reset []
+  worker:
+    restart: always
+  mcp-chassis:
+    restart: always
+  doc-gen: # internal-only (no published ports), so no ports reset needed
+    restart: always
+  reranker:
+    restart: always
+  searxng: # internal-only (no published ports), so no ports reset needed
+    restart: always
+  minio: # profile-gated; overriding it is harmless when the profile is off
+    restart: always
+    ports: !reset []
+
+  # The single public entrance: TLS termination plus one origin for the UI and
+  # the API together, which is what keeps CORS out of production the same way
+  # the Next dev proxy keeps it out of development. Routing lives in
+  # infra/Caddyfile.
+  #
+  # This is the ONE service that deliberately ignores BIND_HOST. Every other
+  # published port in this stack defaults to loopback so it cannot be reached
+  # from off-box; a reverse proxy bound to loopback would serve nobody, and
+  # being reachable is its entire purpose.
+  caddy:
+    image: caddy:2.11.4
+    restart: always
+    # The x-logging anchor in the base file cannot be referenced from here:
+    # YAML anchors are resolved per document, and compose parses each file
+    # separately before merging them. Repeated literally so this container's log
+    # is capped like every other one - the one container whose log a public
+    # deployment will actually fill.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      # Healthy, not started: Caddy answering before the API can would turn a
+      # slow boot into a wave of 502s for anyone already pointed at the domain.
+      backend: { condition: service_healthy }
+      # Started is enough for the frontend - it has no dependants of its own,
+      # and its healthcheck deliberately allows a long first-request warmup.
+      frontend: { condition: service_started }
+    environment:
+      # Read by the Caddyfile itself, never by an application container.
+      #
+      # No domain yet means `localhost`, served with Caddy's internal CA, so a
+      # box with no DNS record still gets HTTPS; a real hostname switches the
+      # same file to publicly-trusted ACME certificates with no edit.
+      #
+      # The fallback is applied HERE, by compose, and not left to the Caddyfile's
+      # own `{$DOMAIN:localhost}` - because those two defaults do not cover the
+      # same case. Caddy substitutes its default only when a variable is UNSET,
+      # while compose's `:-` also covers a variable that is set and EMPTY, which
+      # is exactly what a blank `DOMAIN=` line in .env produces. Without this,
+      # that blank line expands the site address to nothing and the whole site
+      # block is read as part of the global options - a parse error at best.
+      - DOMAIN=${DOMAIN:-localhost}
+      # The ACME contact address is optional, and an `email` directive with an
+      # empty argument is a Caddyfile PARSE ERROR rather than a no-op - so the
+      # whole directive is composed here and expands to nothing when the address
+      # is unset. `:+` substitutes only when the variable is set and non-empty.
+      - CADDY_ACME_EMAIL_OPTION=${ACME_EMAIL:+email ${ACME_EMAIL}}
+    volumes:
+      - ../infra/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates, private keys and the ACME account live here. A NAMED
+      # volume because losing it means re-issuing every certificate on the next
+      # container recreate, and certificate authorities rate-limit precisely
+      # that. /config holds Caddy's autosaved last-known-good configuration.
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+      # HTTP/3 rides UDP on the same port number. Unpublished, browsers simply
+      # stay on TCP, so this is a performance option rather than a requirement.
+      - "443:443/udp"
+
+volumes:
+  caddy_data:
+  caddy_config:

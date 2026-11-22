@@ -1,0 +1,87 @@
+/* =====================================================================
+   Manuscript - theme tokens
+   Mood: a well-set book page; the theme for long reading. Warm paper,
+   ink text, oxblood accent; depth via rules (single, double, and
+   footnote-short), never shadows. Single-mode LIGHT theme: data-mode
+   is ignored - a printed page has no dark variant.
+
+   The flourish layer (see prototypes/manuscript.html) does the heavy
+   lifting: assistant prose typeset directly on the page (no bubble),
+   user turns as indented quotations with a left rule, citations as a
+   real footnote block, thinking as marginalia with a breathing rule,
+   tool traces as a proofreader's caret plus one terse editorial line,
+   and the Integrations panel as a colophon page. These tokens carry the palette, the 2px "print"
+   geometry, and the Georgia prose stack.
+
+   Checked contrast (computed, WCAG 2.x relative luminance):
+     --s-text      #262019 on --s-bg-app    #f6efe0 = 14.1:1 (AA >= 4.5 pass)
+     --s-text      #262019 on --s-bg-panel  #efe6d2 = 13.0:1 (AA >= 4.5 pass)
+     --s-text      #262019 on --s-bg-raised #fbf6ea = 14.9:1 (AA >= 4.5 pass)
+     --s-text-2    #5a5142 on --s-bg-app    #f6efe0 =  6.8:1 (AA >= 4.5 pass)
+     --s-text-2    #5a5142 on --s-bg-panel  #efe6d2 =  6.3:1 (AA >= 4.5 pass)
+     --s-text-2    #5a5142 on --s-bg-inset  #ece1c6 =  6.0:1 (AA >= 4.5 pass)
+     --s-text-3    #8a7f6a on --s-bg-app    #f6efe0 =  3.4:1 (>= 3:1 pass)
+     --s-text-3    #8a7f6a on --s-bg-panel  #efe6d2 =  3.2:1 (>= 3:1 pass)
+     --s-on-accent #f9f3e6 on --s-accent    #6d1a1a = 10.5:1 (AA >= 4.5 pass)
+     --s-on-accent #f9f3e6 on accent-hover  #521111 = 13.1:1 (AA >= 4.5 pass)
+     --s-accent    #6d1a1a on --s-bg-app    #f6efe0 = 10.1:1 (as ink AND as
+                   the focus ring: far above the 3:1 ring minimum)
+     --c-code-fg   #2c251c on --c-code-bg   #ece1c6 = 11.6:1 (AA >= 4.5 pass)
+     --s-info      #35566b on --s-bg-app    #f6efe0 =  6.8:1 (the "N.B."
+                   notice glyph renders as text, so it is held to AA)
+     --s-danger    #8c2a16 on --s-bg-app    #f6efe0 =  7.5:1 (AA >= 4.5 pass)
+     --s-ok        #3f6b3a on --s-bg-app    #f6efe0 =  5.4:1 (>= 3:1 pass)
+     --s-warn      #8a5a18 on --s-bg-app    #f6efe0 =  5.2:1 (>= 3:1 pass)
+   ===================================================================== */
+
+html[data-theme="manuscript"] {
+  /* tier 1 - primitives: paper, ink, rules, oxblood */
+  --p-paper-0: #f6efe0; --p-paper-1: #efe6d2; --p-paper-2: #ece1c6;
+  --p-vellum: #fbf6ea;
+  --p-ink-0: #262019; --p-ink-1: #5a5142; --p-ink-2: #8a7f6a;
+  --p-rule-0: #ddd2b8; --p-rule-1: #b9ab8c;
+  --p-oxblood-0: #6d1a1a; --p-oxblood-1: #521111;
+
+  /* tier 2 - semantic */
+  --s-bg-app: var(--p-paper-0);
+  --s-bg-panel: var(--p-paper-1);
+  --s-bg-raised: var(--p-vellum);
+  --s-bg-inset: var(--p-paper-2);
+  --s-text: var(--p-ink-0);
+  --s-text-2: var(--p-ink-1);
+  --s-text-3: var(--p-ink-2);
+  --s-text-inverse: #f9f3e6;
+  --s-accent: var(--p-oxblood-0);
+  --s-accent-hover: var(--p-oxblood-1);
+  --s-on-accent: #f9f3e6;
+  --s-info: #35566b; --s-ok: #3f6b3a; --s-warn: #8a5a18; --s-danger: #8c2a16;
+  --s-border: var(--p-rule-0);
+  --s-border-strong: var(--p-rule-1);
+  --s-focus: var(--p-oxblood-0);
+
+  /* tier 3 - component (no fills: the page carries everything on rules) */
+  --c-bubble-user-bg: transparent;
+  --c-bubble-user-fg: var(--s-text);
+  --c-thinking-bg: transparent;
+  --c-thinking-rule: var(--s-accent);
+  --c-tool-bg: transparent;
+  --c-citation-bg: transparent;
+  --c-code-bg: var(--p-paper-2);
+  --c-code-fg: #2c251c;
+
+  /* theme-specific: baseline grid ink + the quotation rule */
+  --m-baseline: rgba(38, 32, 25, .07);
+  --m-quote-rule: color-mix(in srgb, var(--s-accent) 45%, var(--s-border-strong));
+
+  /* shape + motion: square print geometry, standard tempo, no springs */
+  --radius-s: 2px; --radius-m: 2px; --radius-l: 2px;
+  --radius-bubble: 0;
+  --clip-panel: none;
+  --dur-fast: 120ms; --dur-base: 200ms; --dur-slow: 320ms;
+  --ease-standard: cubic-bezier(.4,0,.2,1);
+  --ease-entrance: cubic-bezier(.16,1,.3,1);
+  --ease-spring: cubic-bezier(.4,0,.2,1); /* no overshoot on a page */
+  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-prose: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
+  --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+}

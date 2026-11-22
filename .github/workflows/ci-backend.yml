@@ -1,0 +1,53 @@
+name: ci-backend
+
+# Scoped to the backend tree plus the repo files its tests read (compose and
+# env templates, the Makefile, operational scripts, the sidecar services): a
+# docs-only or frontend-only change must not spend billed minutes on a full
+# pytest run. The workflow file itself is in
+# the path list so a change to the gate is verified by the gate.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/backend/**'
+      - 'infra/**'
+      - 'scripts/**'
+      - 'services/**'
+      - 'Makefile'
+      - '.github/workflows/ci-backend.yml'
+  pull_request:
+    paths:
+      - 'apps/backend/**'
+      - 'infra/**'
+      - 'scripts/**'
+      - 'services/**'
+      - 'Makefile'
+      - '.github/workflows/ci-backend.yml'
+
+permissions:
+  contents: read
+
+# A push to main is post-merge validation of the combined tree and is never
+# cancelled partway through; a superseded pull-request run is cancelled since
+# only the latest commit on the branch needs a verdict.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: '3.13'
+          enable-cache: true
+          cache-dependency-glob: apps/backend/uv.lock
+      - working-directory: apps/backend
+        run: |
+          uv sync --frozen
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run pytest -m "not ollama and not ocr"

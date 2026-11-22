@@ -1,0 +1,41 @@
+[project]
+name = "mcp-chassis"
+version = "0.1.0"
+description = "Generic Streamable-HTTP container that mounts MCP wrapper servers at distinct paths."
+requires-python = ">=3.13"
+dependencies = [
+    "mcp>=1.28,<2",
+    # Imported directly (the parent app, routing, middleware), so declared
+    # directly rather than leaned on as a transitive dependency of mcp.
+    "starlette>=0.40",
+    "uvicorn>=0.32",
+]
+
+[dependency-groups]
+dev = [
+    "anyio>=4",
+    "httpx>=0.28",
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "SIM", "C4", "D"]
+ignore = ["D100", "D104", "D107", "D203", "D213", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

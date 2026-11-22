@@ -1,0 +1,80 @@
+name: js-security-audit
+
+# Enforces the locked dependency-audit rule at the CI layer, independently of
+# any contributor's local tooling. Nightly run catches newly-disclosed CVEs
+# against an unchanged lockfile. Make `npm-audit` a required check on main once
+# branch protection is available. (OSV-Scanner is added alongside this in
+# ROADMAP Phase 8.)
+#
+# EVERY JS workspace is audited, not just the app. This began as a
+# frontend-only gate, and packages/api-types then quietly carried two high
+# advisories that nothing in CI was watching - the rule is "every JS
+# dependency", so the gate has to follow every lockfile. A matrix rather than a
+# loop, so a failure names the workspace it came from.
+on:
+  push:
+    # Only main: every push to an open PR branch already runs the audit via
+    # the pull_request event below, so an unfiltered push trigger ran the
+    # whole matrix twice per push on identical content. The push run is what
+    # keeps main's post-merge record green.
+    branches: [main]
+    paths:
+      - 'apps/frontend/**'
+      - 'packages/api-types/package*.json'
+      - '.github/workflows/frontend-audit.yml'
+  pull_request:
+    paths:
+      - 'apps/frontend/**'
+      - 'packages/api-types/package*.json'
+      - '.github/workflows/frontend-audit.yml'
+  schedule:
+    - cron: '0 4 * * *'
+
+# Least-privilege GITHUB_TOKEN: the audit only reads the checkout.
+permissions:
+  contents: read
+
+# A push to main and the nightly schedule are never cancelled once started -
+# both are unattended runs whose whole point is a complete, standing record.
+# Only a pull-request run, where a newer commit on the branch makes the older
+# one moot, is cancelled in favor of the newer one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  npm-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      # One workspace's advisory must not hide another's: every workspace is
+      # audited even after one of them fails.
+      fail-fast: false
+      matrix:
+        workspace:
+          - apps/frontend
+          - packages/api-types
+    name: npm-audit (${{ matrix.workspace }})
+    steps:
+      - uses: actions/checkout@v7
+      # Skip cleanly when a workspace has no lockfile yet, rather than failing a
+      # job over a directory that is not there.
+      - id: guard
+        run: |
+          if [ -f "${{ matrix.workspace }}/package-lock.json" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "no lockfile in ${{ matrix.workspace }} - skipping audit"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.guard.outputs.run == 'true'
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: ${{ matrix.workspace }}/package-lock.json
+      - if: steps.guard.outputs.run == 'true'
+        working-directory: ${{ matrix.workspace }}
+        run: |
+          npm ci
+          npm audit --audit-level=moderate

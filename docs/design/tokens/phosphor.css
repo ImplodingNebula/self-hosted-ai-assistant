@@ -1,0 +1,103 @@
+/* =====================================================================
+   Phosphor - theme tokens
+   A CRT terminal that grew up: near-black surfaces with a 1-2%
+   phosphor tint of the accent, depth via brightness (never shadow),
+   all three font tokens on mono, diagonal console-cut panels via
+   --clip-panel. Dark only: data-mode is ignored. Accent variants
+   (green default, amber, red) are selected by html[data-accent] and
+   re-tint every surface, not just the accent.
+
+   Checked contrast (WCAG 2.x relative luminance; AA targets:
+   text and text-2 on bg-app >= 4.5:1, text-3 >= 3:1,
+   on-accent on accent >= 4.5:1, focus vs surroundings >= 3:1):
+
+     green (default)
+       --s-text    #cdf5d6 on --s-bg-app #050b07 = 16.7:1  PASS
+       --s-text-2  #8fd19e on --s-bg-app          = 11.1:1  PASS
+       --s-text-3  #569a68 on --s-bg-app          =  5.9:1  PASS
+       --s-on-accent #03140a on --s-accent #4dff88 = 14.4:1 PASS
+       --s-focus   #4dff88 vs --s-bg-app          = 15.1:1  PASS
+     amber
+       --s-text    #f2e3c2 on --s-bg-app #0a0804 = 15.8:1  PASS
+       --s-text-2  #ccae7e on --s-bg-app          =  9.5:1  PASS
+       --s-text-3  #9a7f45 on --s-bg-app          =  5.2:1  PASS
+       --s-on-accent #140d00 on --s-accent #ffb224 = 10.7:1 PASS
+       --s-focus   #ffb224 vs --s-bg-app          = 11.1:1  PASS
+     red
+       --s-text    #ffd9cf on --s-bg-app #0b0505 = 15.5:1  PASS
+       --s-text-2  #e0a396 on --s-bg-app          =  9.5:1  PASS
+       --s-text-3  #a96a5e on --s-bg-app          =  4.7:1  PASS
+       --s-on-accent #180502 on --s-accent #ff5240 =  6.2:1 PASS
+       --s-focus   #ff5240 vs --s-bg-app          =  6.3:1  PASS
+
+   Text on --s-bg-panel stays within 0.8 of the bg-app figures in
+   every variant (worst case 14.9:1), so panel surfaces pass too.
+
+   Status glyphs (notice "i", confirm "!") draw --s-text-inverse on
+   the status color; checked across all three accent variants:
+     --s-text-inverse on --s-info #58b6ff  >= 8.7:1  PASS
+     --s-text-inverse on --s-danger #ff6a52 >= 6.7:1 PASS
+   ===================================================================== */
+
+html[data-theme="phosphor"] {
+  /* tier 1 - primitives (green phosphor) */
+  --p-bg-0: #050b07; --p-bg-1: #0a130c; --p-bg-2: #0d1810; --p-bg-3: #030705;
+  --p-tx-0: #cdf5d6; --p-tx-1: #8fd19e; --p-tx-2: #569a68;
+  --p-ln-0: #1c3323; --p-ln-1: #2e5238;
+  --p-ph-0: #4dff88; --p-ph-1: #7dffa8; --p-ph-dark: #03140a;
+
+  /* tier 2 - semantic */
+  --s-bg-app: var(--p-bg-0);
+  --s-bg-panel: var(--p-bg-1);
+  --s-bg-raised: var(--p-bg-2);
+  --s-bg-inset: var(--p-bg-3);
+  --s-text: var(--p-tx-0);
+  --s-text-2: var(--p-tx-1);
+  --s-text-3: var(--p-tx-2);
+  --s-text-inverse: #04120a;
+  --s-accent: var(--p-ph-0);
+  --s-accent-hover: var(--p-ph-1);
+  --s-on-accent: var(--p-ph-dark);
+  --s-info: #58b6ff; --s-ok: #3ddc84; --s-warn: #ffb224; --s-danger: #ff6a52;
+  --s-border: var(--p-ln-0);
+  --s-border-strong: var(--p-ln-1);
+  --s-focus: var(--p-ph-0);
+
+  /* tier 3 - component (sparse overrides of base derivations) */
+  --c-bubble-user-bg: color-mix(in srgb, var(--s-accent) 9%, var(--p-bg-1));
+  --c-bubble-user-fg: var(--s-text);
+  --c-thinking-bg: color-mix(in srgb, var(--p-bg-1) 55%, var(--p-bg-0));
+  --c-thinking-rule: color-mix(in srgb, var(--s-accent) 55%, var(--p-ln-1));
+  --c-tool-bg: var(--p-bg-3);
+  --c-citation-bg: var(--p-bg-1);
+  --c-code-bg: color-mix(in srgb, var(--s-accent) 4%, #030303);
+  --c-code-fg: var(--p-tx-0);
+
+  /* shape + motion */
+  --radius-s: 2px; --radius-m: 3px; --radius-l: 4px;
+  --radius-bubble: 4px;
+  --clip-panel: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+  --dur-fast: 100ms; --dur-base: 180ms; --dur-slow: 300ms;
+  --ease-standard: cubic-bezier(.4,0,.2,1);
+  --ease-entrance: cubic-bezier(.16,1,.3,1);
+  --ease-spring: cubic-bezier(.34,1.4,.64,1);
+  --font-ui: ui-monospace, "Cascadia Code", Consolas, "SF Mono", Menlo, monospace;
+  --font-prose: var(--font-ui);
+  --font-mono: var(--font-ui);
+}
+
+html[data-theme="phosphor"][data-accent="amber"] {
+  --p-bg-0: #0a0804; --p-bg-1: #120e07; --p-bg-2: #181209; --p-bg-3: #070502;
+  --p-tx-0: #f2e3c2; --p-tx-1: #ccae7e; --p-tx-2: #9a7f45;
+  --p-ln-0: #332918; --p-ln-1: #52422a;
+  --p-ph-0: #ffb224; --p-ph-1: #ffc655; --p-ph-dark: #140d00;
+  --s-text-inverse: #120c02;
+}
+
+html[data-theme="phosphor"][data-accent="red"] {
+  --p-bg-0: #0b0505; --p-bg-1: #140a09; --p-bg-2: #1a0d0b; --p-bg-3: #070302;
+  --p-tx-0: #ffd9cf; --p-tx-1: #e0a396; --p-tx-2: #a96a5e;
+  --p-ln-0: #3a221d; --p-ln-1: #5a352d;
+  --p-ph-0: #ff5240; --p-ph-1: #ff7a63; --p-ph-dark: #180502;
+  --s-text-inverse: #140503;
+}

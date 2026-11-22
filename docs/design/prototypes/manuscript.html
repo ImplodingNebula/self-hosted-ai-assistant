@@ -1,0 +1,1030 @@
+<!doctype html>
+<html lang="en" data-theme="manuscript" data-mode="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manuscript - design prototype</title>
+<style>
+/* =====================================================================
+   PROTOTYPE SKELETON - shared structure for every theme prototype.
+   Sections:
+     1. Reset + base
+     2. TOKENS (tier 1 primitives, tier 2 semantic, tier 3 component)
+     3. Layout (sidebar / topbar / thread / composer)
+     4. Message anatomy (bubbles, thinking, tool trace, confirm,
+        citations, notices)
+     5. States (driven by <body data-state="...">)
+     6. Reduced motion (blanket override - base-sheet law)
+     7. THEME FLOURISH LAYER (per-theme, [data-part] hooks only)
+     8. Prototype harness chrome (not part of the app design)
+   A theme prototype changes ONLY sections 2 and 7 (and may add
+   keyframes it references). Markup and sample content are identical
+   across all prototypes.
+   The real app serves Geist Sans/Mono via next/font; prototypes use
+   the closest system stacks to stay self-contained.
+   ===================================================================== */
+
+/* ---------- 1. Reset + base ---------- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font-ui);
+  background: var(--s-bg-app);
+  color: var(--s-text);
+  font-size: 15px;
+  line-height: 1.7;
+  transition: background var(--dur-slow) var(--ease-standard);
+}
+::selection { background: color-mix(in srgb, var(--s-accent) 25%, transparent); }
+:focus-visible { outline: 2px solid var(--s-focus); outline-offset: 2px; border-radius: 2px; }
+
+/* ---------- 2. TOKENS ---------- */
+/* Manuscript: a well-set book page; the theme for long reading. Warm
+   paper, ink text, oxblood accent; depth via rules, never shadows.
+   Light only - a printed page has no dark mode.
+   Contrast (on bg-app): text 14.1:1, text-2 6.8:1, text-3 3.4:1,
+   accent-as-ink 10.1:1, info 6.8:1, danger 7.5:1.
+   On-accent on accent 10.5:1; code 11.6:1; text on panel 13.0:1. */
+:root {
+  /* tier 1 - primitives */
+  --p-paper-0: #f6efe0; --p-paper-1: #efe6d2; --p-paper-2: #ece1c6;
+  --p-vellum: #fbf6ea;
+  --p-ink-0: #262019; --p-ink-1: #5a5142; --p-ink-2: #8a7f6a;
+  --p-rule-0: #ddd2b8; --p-rule-1: #b9ab8c;
+  --p-oxblood-0: #6d1a1a; --p-oxblood-1: #521111;
+
+  /* tier 2 - semantic */
+  --s-bg-app: var(--p-paper-0);
+  --s-bg-panel: var(--p-paper-1);
+  --s-bg-raised: var(--p-vellum);
+  --s-bg-inset: var(--p-paper-2);
+  --s-text: var(--p-ink-0);
+  --s-text-2: var(--p-ink-1);
+  --s-text-3: var(--p-ink-2);
+  --s-text-inverse: #f9f3e6;
+  --s-accent: var(--p-oxblood-0);
+  --s-accent-hover: var(--p-oxblood-1);
+  --s-on-accent: #f9f3e6;
+  --s-info: #35566b; --s-ok: #3f6b3a; --s-warn: #8a5a18; --s-danger: #8c2a16;
+  --s-border: var(--p-rule-0);
+  --s-border-strong: var(--p-rule-1);
+  --s-focus: var(--p-oxblood-0);
+
+  /* tier 3 - component (sparse overrides of base derivations) */
+  --c-bubble-user-bg: transparent;
+  --c-bubble-user-fg: var(--s-text);
+  --c-thinking-bg: transparent;
+  --c-thinking-rule: var(--s-accent);
+  --c-tool-bg: transparent;
+  --c-citation-bg: transparent;
+  --c-code-bg: var(--p-paper-2);
+  --c-code-fg: #2c251c;
+
+  /* theme-specific: baseline grid ink + the quotation rule */
+  --m-baseline: rgba(38, 32, 25, .07);
+  --m-quote-rule: color-mix(in srgb, var(--s-accent) 45%, var(--s-border-strong));
+
+  /* shape + motion */
+  --radius-s: 2px; --radius-m: 2px; --radius-l: 2px;
+  --radius-bubble: 0;
+  --clip-panel: none;
+  --dur-fast: 120ms; --dur-base: 200ms; --dur-slow: 320ms;
+  --ease-standard: cubic-bezier(.4,0,.2,1);
+  --ease-entrance: cubic-bezier(.16,1,.3,1);
+  --ease-spring: cubic-bezier(.4,0,.2,1); /* no overshoot on a page */
+  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-prose: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", "Times New Roman", serif;
+  --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+/* ---------- 3. Layout ---------- */
+.app { display: flex; height: 100%; }
+
+[data-part="sidebar"] {
+  width: 280px; flex-shrink: 0;
+  background: var(--c-sidebar-bg, var(--s-bg-panel));
+  border-right: 1px solid var(--s-border);
+  display: flex; flex-direction: column;
+  padding: 16px 12px;
+  gap: 4px;
+}
+.brand { font-size: 14px; font-weight: 600; padding: 4px 10px 14px; letter-spacing: .01em; }
+.new-chat {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; border-radius: var(--radius-m);
+  background: var(--s-accent); color: var(--s-on-accent);
+  font-size: 13px; font-weight: 600;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.new-chat:hover { background: var(--s-accent-hover); }
+.side-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--s-text-3); padding: 16px 10px 6px; }
+.convo {
+  display: block; width: 100%; text-align: left;
+  padding: 8px 10px; border-radius: var(--radius-s);
+  font-size: 13px; color: var(--s-text-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.convo:hover { background: var(--s-bg-inset); }
+.convo[aria-current="true"] { background: var(--s-bg-inset); color: var(--s-text); font-weight: 500; }
+.side-foot { margin-top: auto; border-top: 1px solid var(--s-border); padding-top: 10px;
+  display: flex; flex-direction: column; gap: 2px; }
+.side-foot .convo { display: flex; align-items: center; gap: 8px; }
+
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+[data-part="topbar"] {
+  height: 48px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--s-border);
+  background: color-mix(in srgb, var(--s-bg-app) 85%, transparent);
+}
+.title { font-size: 14px; font-weight: 600; }
+.model-chip {
+  font-family: var(--font-mono); font-size: 11px; color: var(--s-text-2);
+  background: var(--s-bg-panel); border: 1px solid var(--s-border);
+  padding: 3px 8px; border-radius: 99px;
+}
+.conn { margin-left: auto; display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--s-text-3); }
+.conn::before { content: ""; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--s-ok); display: inline-block; }
+
+[data-part="thread"] {
+  flex: 1; overflow-y: auto;
+  padding: 32px 20px 16px;
+}
+.thread-inner { max-width: 48rem; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+
+/* ---------- 4. Message anatomy ---------- */
+.turn { display: flex; flex-direction: column; gap: 8px;
+  animation: enter var(--dur-base) var(--ease-entrance); }
+@keyframes enter { from { opacity: 0; transform: translateY(4px); } }
+
+[data-part="bubble-user"] {
+  align-self: flex-end; max-width: 85%;
+  background: var(--c-bubble-user-bg); color: var(--c-bubble-user-fg);
+  padding: 10px 16px;
+  border-radius: var(--radius-bubble);
+  border-bottom-right-radius: var(--radius-s);
+}
+.attach-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-family: var(--font-mono);
+  background: var(--s-bg-raised); border: 1px solid var(--s-border);
+  border-radius: var(--radius-s); padding: 3px 8px; margin-top: 6px;
+  color: var(--s-text-2);
+}
+
+[data-part="bubble-assist"] { max-width: 100%; font-family: var(--font-prose);
+  display: flex; flex-direction: column; gap: 10px; }
+
+[data-part="content"] p + p { margin-top: 10px; }
+[data-part="content"] ul { padding-left: 22px; margin: 8px 0; }
+[data-part="content"] li + li { margin-top: 4px; }
+.cite-mark {
+  font-size: 10px; font-weight: 700; vertical-align: super;
+  color: var(--s-accent); cursor: pointer; padding: 0 1px;
+  transition: opacity var(--dur-base) var(--ease-standard);
+}
+pre {
+  font-family: var(--font-mono); font-size: 13px; line-height: 1.6;
+  background: var(--c-code-bg); color: var(--c-code-fg);
+  border-radius: var(--radius-m); padding: 14px 16px;
+  overflow-x: auto; margin: 10px 0;
+}
+code:not(pre code) {
+  font-family: var(--font-mono); font-size: .88em;
+  background: var(--s-bg-inset); border: 1px solid var(--s-border);
+  border-radius: 4px; padding: 1px 5px;
+}
+
+/* thinking pane */
+[data-part="thinking"] {
+  border-left: 2px solid var(--c-thinking-rule);
+  background: var(--c-thinking-bg);
+  border-radius: 0 var(--radius-m) var(--radius-m) 0;
+  padding: 8px 14px;
+  font-size: 13px; color: var(--s-text-2);
+}
+[data-part="thinking"] summary {
+  cursor: pointer; list-style: none; font-size: 12px; font-weight: 600;
+  color: var(--s-text-3); display: flex; align-items: center; gap: 6px;
+}
+[data-part="thinking"][open] summary { margin-bottom: 6px; }
+[data-part="thinking"] .think-body { font-style: italic; }
+body[data-state="thinking"] [data-part="thinking"] { border-left-width: 2px; }
+body[data-state="thinking"] .live [data-part="thinking"] .think-rule-pulse { display: block; }
+
+/* tool trace */
+[data-part="tool-trace"] {
+  background: var(--c-tool-bg);
+  border: 1px solid var(--s-border);
+  border-radius: var(--radius-m);
+  clip-path: var(--clip-panel);
+  padding: 10px 14px;
+  font-size: 13px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.tool-row { display: flex; align-items: center; gap: 8px; color: var(--s-text-2); }
+.tool-name { font-family: var(--font-mono); font-size: 12px; color: var(--s-text); }
+.tool-meta { margin-left: auto; font-size: 12px; color: var(--s-text-3); }
+.tool-spin {
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--s-border-strong); border-top-color: var(--s-accent);
+  animation: spin 900ms linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.tool-ok { color: var(--s-ok); font-weight: 700; }
+
+/* confirmation card */
+[data-part="confirm"] {
+  border: 1px solid color-mix(in srgb, var(--s-danger) 45%, var(--s-border));
+  background: color-mix(in srgb, var(--s-danger) 6%, var(--s-bg-raised));
+  border-radius: var(--radius-m);
+  clip-path: var(--clip-panel);
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+  font-size: 13px;
+}
+.confirm-head { font-weight: 600; display: flex; gap: 8px; align-items: center; }
+.confirm-head::before { content: "!"; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--s-danger); color: var(--s-text-inverse); font-size: 12px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center; }
+.confirm-detail { font-family: var(--font-mono); font-size: 12px; color: var(--s-text-2);
+  background: var(--s-bg-inset); border-radius: var(--radius-s); padding: 8px 10px; }
+.confirm-actions { display: flex; gap: 8px; }
+.btn {
+  padding: 7px 14px; border-radius: var(--radius-s); font-size: 13px; font-weight: 600;
+  transition: background var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard);
+}
+.btn-primary { background: var(--s-accent); color: var(--s-on-accent); }
+.btn-primary:hover { background: var(--s-accent-hover); }
+.btn-ghost { border: 1px solid var(--s-border-strong); color: var(--s-text-2); }
+.btn-ghost:hover { background: var(--s-bg-inset); }
+
+/* citations */
+[data-part="citations"] { display: flex; flex-wrap: wrap; gap: 6px;
+  transition: opacity var(--dur-base) var(--ease-standard); }
+.cite-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; padding: 4px 10px;
+  background: var(--c-citation-bg); border: 1px solid var(--s-border);
+  border-radius: 99px; color: var(--s-text-2);
+  transition: border-color var(--dur-fast) var(--ease-standard);
+}
+.cite-chip:hover { border-color: var(--s-accent); color: var(--s-text); }
+.cite-chip b { color: var(--s-accent); font-size: 11px; }
+
+/* honesty notice */
+[data-part="notice"] {
+  display: flex; gap: 8px; align-items: baseline;
+  font-size: 12.5px; color: var(--s-text-2);
+  border: 1px dashed var(--s-border-strong);
+  border-radius: var(--radius-s);
+  padding: 8px 12px;
+}
+[data-part="notice"]::before { content: "i"; flex-shrink: 0;
+  width: 15px; height: 15px; border-radius: 50%; text-align: center;
+  font-size: 10px; font-weight: 800; line-height: 15px;
+  background: var(--s-info); color: var(--s-text-inverse); align-self: center; }
+
+/* waiting indicator */
+.waiting-dots { display: inline-flex; gap: 4px; padding: 6px 0; }
+.waiting-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--s-text-3);
+  animation: dotpulse 1.2s var(--ease-standard) infinite; }
+.waiting-dots i:nth-child(2) { animation-delay: .15s; }
+.waiting-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes dotpulse { 0%,60%,100% { opacity: .25; } 30% { opacity: 1; } }
+
+/* streaming caret */
+.caret { display: inline-block; width: 7px; height: 15px; margin-left: 2px;
+  background: var(--s-accent); vertical-align: text-bottom;
+  animation: caret 1s steps(1) infinite; border-radius: 1px; }
+@keyframes caret { 50% { opacity: 0; } }
+
+/* error block */
+[data-part="error"] {
+  border: 1px solid color-mix(in srgb, var(--s-danger) 40%, var(--s-border));
+  color: var(--s-danger); background: color-mix(in srgb, var(--s-danger) 5%, var(--s-bg-app));
+  border-radius: var(--radius-m); padding: 10px 14px; font-size: 13px;
+  display: flex; align-items: center; gap: 10px;
+}
+[data-part="error"] .btn { margin-left: auto; border: 1px solid currentColor; color: inherit; }
+
+/* ---------- composer ---------- */
+[data-part="composer"] { flex-shrink: 0; padding: 8px 20px 18px; }
+.composer-box {
+  max-width: 48rem; margin: 0 auto;
+  background: var(--s-bg-raised);
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-l);
+  padding: 12px 14px 10px;
+  display: flex; flex-direction: column; gap: 10px;
+  transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+.composer-box:focus-within { border-color: var(--s-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--s-accent) 15%, transparent); }
+.composer-input { border: none; background: none; resize: none; font: inherit;
+  color: var(--s-text); outline: none; min-height: 24px; }
+.composer-input::placeholder { color: var(--s-text-3); }
+.composer-row { display: flex; align-items: center; gap: 8px; }
+.toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--s-text-3);
+  border: 1px solid var(--s-border); border-radius: 99px;
+  padding: 4px 10px;
+  transition: color var(--dur-fast), border-color var(--dur-fast), background var(--dur-fast);
+}
+.toggle[aria-pressed="true"] { color: var(--s-accent); border-color: var(--s-accent);
+  background: color-mix(in srgb, var(--s-accent) 8%, transparent); }
+
+/* model selector (drop-up: the menu opens ABOVE the trigger) */
+[data-part="model-select"] { position: relative; }
+[data-part="model-select"] summary {
+  list-style: none; display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 12px; color: var(--s-text-2);
+  border: 1px solid var(--s-border); border-radius: 99px; padding: 4px 10px;
+  cursor: pointer;
+  transition: color var(--dur-fast), border-color var(--dur-fast), background var(--dur-fast);
+}
+[data-part="model-select"] summary::-webkit-details-marker { display: none; }
+[data-part="model-select"] summary::after {
+  content: ""; width: 0; height: 0;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-bottom: 5px solid var(--s-text-3);
+}
+[data-part="model-select"][open] summary,
+[data-part="model-select"] summary:hover { color: var(--s-accent); border-color: var(--s-accent); }
+.model-menu {
+  position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 30;
+  min-width: 270px; list-style: none;
+  background: var(--s-bg-raised); border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-m); clip-path: var(--clip-panel);
+  padding: 6px; box-shadow: 0 12px 32px color-mix(in srgb, var(--s-text) 14%, transparent);
+  display: flex; flex-direction: column; gap: 2px;
+  animation: enter var(--dur-base) var(--ease-entrance);
+}
+.model-opt {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  width: 100%; text-align: left; padding: 7px 10px;
+  border-radius: var(--radius-s);
+  font-family: var(--font-mono); font-size: 12px; color: var(--s-text);
+}
+.model-opt span { font-family: var(--font-ui); font-size: 11px; color: var(--s-text-3); }
+.model-opt:hover { background: var(--s-bg-inset); }
+.model-opt[aria-current="true"] {
+  background: color-mix(in srgb, var(--s-accent) 8%, transparent);
+  box-shadow: inset 2px 0 0 var(--s-accent);
+}
+.send {
+  margin-left: auto; width: 34px; height: 34px; border-radius: var(--radius-m);
+  background: var(--s-accent); color: var(--s-on-accent);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 700;
+  transition: background var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-spring);
+}
+.send:hover { background: var(--s-accent-hover); }
+.send:active { transform: scale(.96); }
+.hint { text-align: center; font-size: 11px; color: var(--s-text-3); margin-top: 8px; }
+
+/* integrations overlay (opened from the sidebar; Settings stays a stub) */
+.overlay {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--s-text) 40%, transparent);
+  animation: fade var(--dur-base) var(--ease-standard);
+}
+/* author display:flex would defeat the [hidden] attribute (UA rule is not
+   !important in shipping browsers); restate it so the overlay opens closed */
+.overlay[hidden] { display: none !important; }
+@keyframes fade { from { opacity: 0; } }
+.panel {
+  width: min(560px, 92vw); max-height: 80vh; overflow-y: auto;
+  background: var(--s-bg-raised); border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-l); clip-path: var(--clip-panel);
+  padding: 18px 20px 20px;
+  display: flex; flex-direction: column; gap: 12px;
+  animation: enter var(--dur-base) var(--ease-entrance);
+}
+.panel-head { display: flex; align-items: center; justify-content: space-between; }
+.panel-head h2 { font-size: 15px; font-weight: 700; }
+.panel-sub { font-size: 13px; color: var(--s-text-2); }
+.server-card {
+  display: flex; align-items: center; gap: 12px;
+  border: 1px solid var(--s-border); border-radius: var(--radius-m);
+  clip-path: var(--clip-panel);
+  padding: 12px 14px; background: var(--c-tool-bg);
+}
+.server-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.server-name { font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.server-url { font-family: var(--font-mono); font-size: 11px; color: var(--s-text-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.badge {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--s-text-3); border: 1px solid var(--s-border);
+  border-radius: 99px; padding: 1px 7px;
+}
+.server-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.switch {
+  width: 36px; height: 20px; flex-shrink: 0; border-radius: 99px;
+  background: var(--s-bg-inset); border: 1px solid var(--s-border-strong);
+  position: relative;
+  transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast);
+}
+.switch i {
+  position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--s-text-3);
+  transition: transform var(--dur-fast) var(--ease-standard), background var(--dur-fast);
+}
+.switch[aria-checked="true"] { background: var(--s-accent); border-color: var(--s-accent); }
+.switch[aria-checked="true"] i { transform: translateX(16px); background: var(--s-on-accent); }
+
+/* ---------- 5. States ---------- */
+/* Visibility of live-turn parts per state is driven by the harness JS
+   (a state -> parts map); CSS handles styling only. The ambient
+   thinking tell lives here: */
+.think-tell { position: fixed; inset: 0; pointer-events: none; opacity: 0; z-index: 0;
+  background: radial-gradient(60% 50% at 50% 30%,
+    color-mix(in srgb, var(--s-accent) 5%, transparent), transparent 70%);
+  transition: opacity 800ms var(--ease-standard); }
+body[data-state="thinking"] .think-tell { opacity: 1;
+  animation: breathe 4s var(--ease-standard) infinite; }
+@keyframes breathe { 50% { opacity: .45; } }
+body[data-state="confirm"] .composer-box { opacity: .5; pointer-events: none; }
+
+/* ---------- 6. Reduced motion (base-sheet law) ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition-duration: 1ms !important; }
+  .think-tell { display: none !important; }
+  body[data-state="thinking"] .live [data-part="thinking"] summary::after {
+    content: "thinking"; font-size: 10px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--s-accent);
+    border: 1px solid currentColor; border-radius: 99px; padding: 1px 7px; }
+  /* manuscript static tell: the marginalia rule sits thickened, no motion */
+  body[data-state="thinking"] .live [data-part="thinking"]::before { width: 2px; }
+}
+
+/* ---------- 7. THEME FLOURISH LAYER ---------- */
+/* Manuscript: a well-set book page. Assistant prose is typeset straight
+   onto the paper; user turns are indented quotations with a left rule;
+   citations are real footnotes under a short separator rule; thinking
+   is marginalia whose vertical rule breathes 1px->2px while reasoning;
+   tool calls read as a proofreader's caret plus one terse editorial
+   line (hover expands the full trace); the Integrations panel
+   is a colophon page of rules and small caps. Depth comes from rules -
+   single, double, and footnote-short - never from shadows.
+   Cascade note: the skeleton's base styles are unlayered and therefore
+   outrank layered declarations, so flourish overrides of base-set
+   properties carry !important. Animated properties (animation,
+   transition) NEVER do: the section 6 reduced-motion blanket must
+   always win over this layer. */
+@layer theme-flourish {
+
+  /* --- the page: faint ruled baseline grid in the margins --- */
+  [data-part="thread"] {
+    background-image:
+      repeating-linear-gradient(to bottom, transparent 0 26px, var(--m-baseline) 26px 27px),
+      repeating-linear-gradient(to bottom, transparent 0 26px, var(--m-baseline) 26px 27px);
+    background-size: calc(50% - 25rem) 100%;
+    background-position: left top, right top;
+    background-repeat: no-repeat;
+    background-attachment: local, local;
+  }
+
+  /* --- running head + contents column --- */
+  [data-part="topbar"] { border-bottom: 1px solid var(--s-border-strong) !important; }
+  .title { font-family: var(--font-prose); font-style: italic; }
+  .model-chip { border-radius: var(--radius-s) !important; }
+  [data-part="sidebar"] { border-right: 3px double var(--s-border-strong) !important; }
+  .brand { font-family: var(--font-prose); font-variant-caps: small-caps; letter-spacing: .05em; }
+  .side-label { font-family: var(--font-prose); }
+
+  /* --- user turns: indented quotations, no fill --- */
+  [data-part="bubble-user"] {
+    align-self: flex-start !important;
+    max-width: 100% !important;
+    background: none !important;
+    border-radius: 0 !important;
+    border-left: 2px solid var(--m-quote-rule);
+    margin-left: 28px;
+    padding: 2px 0 2px 18px !important;
+    font-family: var(--font-prose);
+  }
+
+  /* --- assistant prose: ink marks + excerpt-style code --- */
+  .cite-mark { font-family: var(--font-prose); }
+  pre { border: 1px solid var(--s-border-strong); }
+  .caret { width: 2px !important; border-radius: 0 !important; }
+
+  /* --- thinking: marginalia with a breathing rule --- */
+  [data-part="thinking"] {
+    position: relative;
+    border-left: 0 !important;
+    margin-left: 28px;
+    padding: 6px 16px !important;
+    font-family: var(--font-prose);
+  }
+  [data-part="thinking"]::before {
+    content: ""; position: absolute; left: 0; top: 3px; bottom: 3px;
+    width: 1px; background: var(--c-thinking-rule);
+  }
+  [data-part="thinking"] summary {
+    font-family: var(--font-prose);
+    font-variant-caps: all-small-caps; letter-spacing: .08em;
+  }
+  body[data-state="thinking"] .live [data-part="thinking"]::before {
+    animation: marginalia-breathe 2.8s var(--ease-standard) infinite;
+  }
+
+  /* --- tool trace: a proofreader's caret + one terse editorial line;
+         hover or keyboard focus expands it to the full trace (the
+         quoted query), the closest markup-identical stand-in for the
+         catalog's expand-on-click --- */
+  [data-part="tool-trace"] {
+    border: none !important;
+    padding: 0 !important;
+    font-family: var(--font-prose); font-style: italic;
+  }
+  [data-part="tool-trace"] .tool-row > span:not([class]) { display: none; }
+  [data-part="tool-trace"]:hover .tool-row > span:not([class]),
+  [data-part="tool-trace"]:focus-within .tool-row > span:not([class]) { display: inline; }
+  .tool-name { font-size: 0 !important; }
+  .tool-name::before {
+    content: "consulted the knowledge base";
+    font-family: var(--font-prose); font-size: 13px; font-style: italic;
+    color: var(--s-text-2);
+  }
+  .tool-meta { margin-left: 0 !important; font-size: 13px !important; color: var(--s-text-2) !important; }
+  .tool-meta::before { content: "- "; }
+  [data-part="tool-trace"] .tool-ok {
+    color: var(--s-accent) !important;
+    font-size: 0 !important;
+  }
+  [data-part="tool-trace"] .tool-ok::before {
+    content: "^";
+    font-family: var(--font-prose); font-size: 16px; font-weight: 700;
+    line-height: 1; display: inline-block; transform: translateY(3px);
+  }
+
+  /* --- confirm: a printer's note under a double danger rule --- */
+  [data-part="confirm"] { border-top: 3px double var(--s-danger) !important; }
+  .confirm-head { font-family: var(--font-prose); }
+  .confirm-head::before {
+    background: none !important; color: var(--s-danger) !important;
+    border: 1px solid var(--s-danger);
+    border-radius: 1px !important;
+    font-family: var(--font-prose);
+  }
+
+  /* --- citations: real footnotes under a short separator rule --- */
+  [data-part="citations"] { display: block !important; }
+  [data-part="citations"]::before {
+    content: ""; display: block; width: 96px;
+    border-top: 1px solid var(--s-border-strong);
+    margin: 2px 0 8px;
+  }
+  .cite-chip {
+    display: block !important;
+    border: none !important;
+    padding: 1px 0 !important;
+    font-family: var(--font-prose);
+    font-size: 13px !important;
+  }
+  .cite-chip b { font-family: var(--font-prose); font-size: 12px !important; }
+  .cite-chip b::after { content: "."; }
+
+  /* --- honesty notice: an editor's N.B. between hairlines --- */
+  [data-part="notice"] {
+    border: none !important;
+    border-top: 1px solid var(--s-border) !important;
+    border-bottom: 1px solid var(--s-border) !important;
+    border-radius: 0 !important;
+    padding: 8px 2px !important;
+    font-family: var(--font-prose); font-style: italic;
+  }
+  [data-part="notice"]::before {
+    content: "N.B." !important;
+    width: auto !important; height: auto !important;
+    background: none !important; color: var(--s-info) !important;
+    font-family: var(--font-prose); font-style: normal;
+    font-size: 11px !important; line-height: inherit !important;
+    align-self: baseline !important; letter-spacing: .03em;
+  }
+
+  /* --- composer: a writing slip with a double top rule --- */
+  .composer-box {
+    border-top-width: 3px !important;
+    border-top-style: double !important;
+  }
+  .composer-input { font-family: var(--font-prose) !important; }
+  .hint { font-family: var(--font-prose); font-style: italic; }
+  .toggle, [data-part="model-select"] summary { border-radius: var(--radius-s) !important; }
+  .model-menu {
+    border-top: 3px double var(--s-border-strong) !important;
+    box-shadow: none !important;
+  }
+  .model-opt span { font-family: var(--font-prose) !important; font-style: italic; }
+
+  /* --- integrations: a colophon page --- */
+  .panel { border-top: 3px double var(--s-text-2) !important; }
+  .panel-head h2 {
+    font-family: var(--font-prose);
+    font-variant-caps: all-small-caps;
+    font-size: 17px !important;
+    font-weight: 600 !important;
+    letter-spacing: .12em;
+  }
+  .panel-sub { font-family: var(--font-prose); font-style: italic; }
+  .server-card {
+    border: none !important;
+    border-top: 1px solid var(--s-border-strong) !important;
+    border-radius: 0 !important;
+    padding: 12px 2px !important;
+  }
+  .server-name { font-family: var(--font-prose); }
+  .badge {
+    border: none !important; border-radius: 0 !important; padding: 0 !important;
+    font-family: var(--font-prose);
+    text-transform: none !important;
+    font-variant-caps: all-small-caps;
+    font-size: 12px !important;
+    letter-spacing: .08em !important;
+  }
+  .server-actions { border-top: 1px solid var(--s-border); padding-top: 12px; }
+  .switch { border-radius: var(--radius-s) !important; }
+  .switch i { border-radius: 1px !important; }
+}
+@keyframes marginalia-breathe {
+  0%, 100% { width: 1px; opacity: .65; }
+  50% { width: 2px; opacity: 1; }
+}
+
+/* ---------- 8. Prototype harness chrome (not part of the app) ---------- */
+.harness {
+  position: fixed; right: 14px; bottom: 14px; z-index: 50;
+  background: var(--s-bg-raised); border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-m); padding: 10px 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  display: flex; flex-direction: column; gap: 8px; width: 230px;
+  font-size: 12px;
+}
+.harness h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--s-text-3); font-weight: 700; }
+.harness-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.hbtn { border: 1px solid var(--s-border); border-radius: var(--radius-s);
+  padding: 3px 8px; font-size: 11px; color: var(--s-text-2); }
+.hbtn:hover { background: var(--s-bg-inset); }
+.hbtn[aria-pressed="true"] { background: var(--s-accent); color: var(--s-on-accent);
+  border-color: var(--s-accent); }
+.hbtn-play { background: var(--s-accent); color: var(--s-on-accent); border: none;
+  font-weight: 700; padding: 6px 10px; }
+</style>
+</head>
+<body data-state="idle">
+<div class="think-tell" aria-hidden="true"></div>
+
+<div class="app">
+  <!-- ============ sidebar ============ -->
+  <nav data-part="sidebar" aria-label="Conversations">
+    <div class="brand">AI Chatbot Platform</div>
+    <button class="new-chat"><span>+</span> New chat</button>
+    <div class="side-label">Recent</div>
+    <button class="convo" aria-current="true">Vector store cutover checklist</button>
+    <button class="convo">Summarize the release notes PDF</button>
+    <button class="convo">Weekly metrics query help</button>
+    <button class="convo">Draft: onboarding doc outline</button>
+    <div class="side-foot">
+      <button class="convo" id="open-integrations">Integrations</button>
+      <button class="convo">Settings</button>
+      <button class="convo">Theme: Manuscript</button>
+    </div>
+  </nav>
+
+  <!-- ============ main column ============ -->
+  <div class="main">
+    <header data-part="topbar">
+      <span class="title">Vector store cutover checklist</span>
+      <span class="model-chip">qwen3:4b-instruct</span>
+      <span class="conn">connected</span>
+    </header>
+
+    <main data-part="thread">
+      <div class="thread-inner">
+
+        <!-- Turn pair A1: answered from model knowledge + honesty notice -->
+        <div class="turn">
+          <div data-part="bubble-user">Quick one: what does a vector database actually store?</div>
+        </div>
+        <div class="turn">
+          <div data-part="bubble-assist">
+            <div data-part="content">
+              <p>A vector database stores embeddings: fixed-length arrays of numbers that
+              represent the meaning of a piece of text, an image, or any other content. Each
+              stored point pairs the vector itself with a payload of metadata, and queries work
+              by similarity: the database finds the stored vectors closest to the query vector
+              rather than matching exact keywords.</p>
+            </div>
+            <div data-part="notice">This answer came from the model's own knowledge. It did not
+              search the web or the knowledge base, so time-sensitive details may be out of
+              date.</div>
+          </div>
+        </div>
+
+        <!-- Turn pair A2: full completed turn - thinking, tool trace, citations, code -->
+        <div class="turn">
+          <div data-part="bubble-user">We are moving the vector store to a new host this
+            weekend. What should I double-check before the cutover?
+            <div class="attach-chip">cutover-plan.md</div>
+          </div>
+        </div>
+        <div class="turn">
+          <div data-part="bubble-assist">
+            <details data-part="thinking">
+              <summary>Thought for 6 seconds</summary>
+              <div class="think-body">The user attached a cutover plan and asked about
+                preparation. The knowledge base has migration notes; searching it first, then
+                grounding the answer in both.</div>
+            </details>
+            <div data-part="tool-trace">
+              <div class="tool-row">
+                <span class="tool-ok">&#10003;</span>
+                <span class="tool-name">search_knowledge</span>
+                <span>"vector store migration checklist"</span>
+                <span class="tool-meta">2 sources</span>
+              </div>
+            </div>
+            <div data-part="content">
+              <p>Based on your attached plan and the migration notes in the knowledge base,
+              double-check these before the window opens:</p>
+              <ul>
+                <li><b>Snapshot first.</b> Take a full collection snapshot and verify it
+                  restores on the new host before touching the old one.<span class="cite-mark">[1]</span></li>
+                <li><b>Pin the embedder.</b> Vectors are only comparable if the new host serves
+                  the same embedding model and version; a silent model change strands every
+                  stored vector.<span class="cite-mark">[2]</span></li>
+                <li><b>Re-point by env, not by code.</b> The connection URL lives in
+                  deployment config, so the cutover should be one variable change:</li>
+              </ul>
+<pre>QDRANT_URL=https://new-host:6333
+# roll back = restore the old value</pre>
+              <p>After cutover, run a known-answer retrieval query and compare scores against
+              the old host before closing the window.<span class="cite-mark">[1]</span></p>
+            </div>
+            <div data-part="citations">
+              <span class="cite-chip"><b>1</b> migration-notes.md</span>
+              <span class="cite-chip"><b>2</b> embedding-config.md</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Turn pair B: the LIVE turn, driven by the harness -->
+        <div class="turn">
+          <div data-part="bubble-user">Great. Draft the maintenance-window announcement and
+            post it to the status page.</div>
+        </div>
+        <div class="turn live">
+          <div data-part="bubble-assist">
+            <div class="waiting-dots" data-live="waiting"><i></i><i></i><i></i></div>
+            <details data-part="thinking" data-live="thinking" open>
+              <summary>Thinking</summary>
+              <div class="think-body">Posting to the status page changes external state, so
+                that call needs approval. Drafting the announcement text first, then proposing
+                the post.<span class="caret" data-live-caret="thinking"></span></div>
+            </details>
+            <div data-part="tool-trace" data-live="tool">
+              <div class="tool-row">
+                <span class="tool-spin" aria-hidden="true"></span>
+                <span class="tool-name">search_knowledge</span>
+                <span>"previous maintenance announcements"</span>
+                <span class="tool-meta">running</span>
+              </div>
+            </div>
+            <div data-part="confirm" data-live="confirm">
+              <div class="confirm-head">post_status_update wants to publish</div>
+              <div class="confirm-detail">title: "Scheduled maintenance - vector store
+migration"&#10;window: Sat 22:00-23:30 UTC&#10;audience: all subscribers</div>
+              <div class="confirm-actions">
+                <button class="btn btn-primary" id="approve">Approve and post</button>
+                <button class="btn btn-ghost" id="deny">Deny</button>
+              </div>
+            </div>
+            <div data-part="content" data-live="content">
+              <p id="live-text"></p>
+            </div>
+            <div data-part="error" data-live="error">
+              The tool call failed: the status page API did not respond within the timeout.
+              <button class="btn">Retry</button>
+            </div>
+            <div data-part="citations" data-live="done" style="opacity:0">
+              <span class="cite-chip"><b>1</b> announcement-style.md</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <footer data-part="composer">
+      <div class="composer-box">
+        <textarea class="composer-input" rows="1" placeholder="Message the assistant..."></textarea>
+        <div class="composer-row">
+          <details data-part="model-select">
+            <summary>qwen3:4b-instruct</summary>
+            <menu class="model-menu">
+              <li><button class="model-opt" aria-current="true">qwen3:4b-instruct<span>chat - fast, answers directly</span></button></li>
+              <li><button class="model-opt">qwen3:4b<span>thinking - reasons before answering</span></button></li>
+              <li><button class="model-opt">qwen3-vl:2b<span>vision - reads images on demand</span></button></li>
+            </menu>
+          </details>
+          <button class="toggle" aria-pressed="false">Thinking: Auto</button>
+          <button class="toggle" aria-pressed="true">Web search</button>
+          <button class="send" aria-label="Send">&#8593;</button>
+        </div>
+      </div>
+      <div class="hint">Local model - responses may be imperfect. Files you attach are read on
+        this turn.</div>
+    </footer>
+  </div>
+</div>
+
+<!-- ============ integrations overlay (opened from the sidebar) ============ -->
+<div class="overlay" id="integrations-overlay" hidden>
+  <section class="panel" data-part="integrations" aria-label="Integrations">
+    <div class="panel-head">
+      <h2>Integrations</h2>
+      <button class="btn btn-ghost" id="integrations-close">Close</button>
+    </div>
+    <p class="panel-sub">MCP servers available to this workspace. A server self-describes its
+      tools; adding one takes a name, a base URL and a credential.</p>
+    <div class="server-card">
+      <div class="server-main">
+        <div class="server-name">Docs chassis <span class="badge">workspace credential</span></div>
+        <div class="server-url">http://mcp-chassis:8801/docs</div>
+      </div>
+      <button class="switch" role="switch" aria-checked="true" aria-label="Docs chassis enabled"><i></i></button>
+    </div>
+    <div class="server-card">
+      <div class="server-main">
+        <div class="server-name">Issue tracker <span class="badge">per-user credential</span></div>
+        <div class="server-url">https://tracker.internal/mcp</div>
+      </div>
+      <button class="switch" role="switch" aria-checked="false" aria-label="Issue tracker enabled"><i></i></button>
+    </div>
+    <div class="server-actions">
+      <button class="btn btn-ghost">Test connection</button>
+      <button class="btn btn-primary">Add server</button>
+    </div>
+  </section>
+</div>
+
+<!-- ============ prototype harness (not part of the app design) ============ -->
+<aside class="harness" aria-label="Prototype harness">
+  <h2>Prototype harness</h2>
+  <button class="hbtn-play" id="play">Play full turn</button>
+  <div class="harness-row" id="states"></div>
+</aside>
+
+<script>
+/* Harness: drives the live turn through the state machine.
+   stateParts maps each state to the [data-live] sections it shows. */
+(function () {
+  var STATES = ["idle", "waiting", "thinking", "tool", "confirm", "streaming", "error", "done"];
+  var stateParts = {
+    idle:      [],
+    waiting:   ["waiting"],
+    thinking:  ["thinking"],
+    tool:      ["thinking", "tool"],
+    confirm:   ["thinking", "tool", "confirm"],
+    streaming: ["thinking", "tool", "content"],
+    error:     ["thinking", "tool", "error"],
+    done:      ["thinking", "tool", "content", "done"]
+  };
+  var live = document.querySelector(".live");
+  var liveText = document.getElementById("live-text");
+  var FINAL = "Posted. The status page now shows: \"Scheduled maintenance - vector store " +
+    "migration, Saturday 22:00-23:30 UTC.\" I followed the phrasing of previous " +
+    "announcements[1] and kept the rollback note in the internal copy only.";
+  var typing = null;
+
+  function setState(s) {
+    document.body.dataset.state = s;
+    var show = stateParts[s] || [];
+    live.querySelectorAll("[data-live]").forEach(function (el) {
+      el.style.display = show.indexOf(el.dataset.live) >= 0 ? "" : "none";
+    });
+    // thinking pane: open + caret while thinking, collapsed summary after
+    var think = live.querySelector('[data-part="thinking"]');
+    var caret = live.querySelector('[data-live-caret]');
+    if (think) {
+      think.open = (s === "thinking" || s === "tool" || s === "confirm");
+      think.querySelector("summary").textContent =
+        (s === "thinking") ? "Thinking" : "Thought for 4 seconds";
+      if (caret) caret.style.display = (s === "thinking") ? "" : "none";
+    }
+    // tool row: running vs done
+    var spin = live.querySelector(".tool-spin");
+    var meta = live.querySelector('[data-live="tool"] .tool-meta');
+    var running = (s === "tool");
+    if (spin) spin.style.display = running ? "" : "none";
+    if (meta) meta.textContent = running ? "running" : "1 source";
+    if (!running && spin && !spin.previousCheck) {
+      var ok = live.querySelector('[data-live="tool"] .tool-ok');
+      if (!ok) {
+        ok = document.createElement("span");
+        ok.className = "tool-ok"; ok.innerHTML = "&#10003;";
+        spin.parentNode.insertBefore(ok, spin);
+      }
+      ok.style.display = running ? "none" : "";
+    }
+    var okMark = live.querySelector('[data-live="tool"] .tool-ok');
+    if (okMark) okMark.style.display = running ? "none" : "";
+    // streaming text
+    if (typing) { clearInterval(typing); typing = null; }
+    if (s === "streaming") {
+      liveText.innerHTML = "";
+      var words = FINAL.split(" "), i = 0;
+      var caretEl = document.createElement("span"); caretEl.className = "caret";
+      typing = setInterval(function () {
+        if (i < words.length) {
+          liveText.textContent = words.slice(0, ++i).join(" ");
+          liveText.appendChild(caretEl);
+        } else { clearInterval(typing); typing = null; setState("done"); }
+      }, 55);
+    } else if (s === "done") {
+      liveText.innerHTML = FINAL.replace("[1]",
+        '<span class="cite-mark">[1]</span>');
+      var cites = live.querySelector('[data-live="done"]');
+      if (cites) requestAnimationFrame(function () { cites.style.opacity = "1"; });
+    } else if (s === "idle") {
+      liveText.textContent = "";
+    }
+    document.querySelectorAll("#states .hbtn").forEach(function (b) {
+      b.setAttribute("aria-pressed", b.textContent === s ? "true" : "false");
+    });
+  }
+
+  // state buttons
+  var row = document.getElementById("states");
+  STATES.forEach(function (s) {
+    var b = document.createElement("button");
+    b.className = "hbtn"; b.textContent = s;
+    b.addEventListener("click", function () { setState(s); });
+    row.appendChild(b);
+  });
+
+  // play sequence: waiting -> thinking -> tool -> confirm (waits for click)
+  document.getElementById("play").addEventListener("click", function () {
+    setState("waiting");
+    setTimeout(function () { setState("thinking"); }, 1200);
+    setTimeout(function () { setState("tool"); }, 3600);
+    setTimeout(function () { setState("confirm"); }, 5600);
+  });
+  document.getElementById("approve").addEventListener("click", function () {
+    setState("streaming");
+  });
+  document.getElementById("deny").addEventListener("click", function () {
+    setState("done");
+    liveText.textContent = "Understood - I have not posted anything. The draft is above if " +
+      "you want to publish it yourself.";
+    var cites = live.querySelector('[data-live="done"]');
+    if (cites) cites.style.display = "none";
+  });
+
+  // integrations overlay
+  var overlay = document.getElementById("integrations-overlay");
+  document.getElementById("open-integrations").addEventListener("click", function () {
+    overlay.hidden = false;
+  });
+  document.getElementById("integrations-close").addEventListener("click", function () {
+    overlay.hidden = true;
+  });
+  overlay.addEventListener("click", function (e) { if (e.target === overlay) overlay.hidden = true; });
+  document.querySelectorAll(".switch").forEach(function (sw) {
+    sw.addEventListener("click", function () {
+      sw.setAttribute("aria-checked", sw.getAttribute("aria-checked") === "true" ? "false" : "true");
+    });
+  });
+
+  // model selector (drop-up)
+  var modelSelect = document.querySelector('[data-part="model-select"]');
+  modelSelect.querySelectorAll(".model-opt").forEach(function (opt) {
+    opt.addEventListener("click", function () {
+      modelSelect.querySelectorAll(".model-opt").forEach(function (o) { o.removeAttribute("aria-current"); });
+      opt.setAttribute("aria-current", "true");
+      modelSelect.querySelector("summary").textContent = opt.firstChild.textContent;
+      modelSelect.open = false;
+    });
+  });
+
+  // manuscript is a single-mode (light) theme: no mode toggle
+
+  setState("idle");
+})();
+</script>
+</body>
+</html>

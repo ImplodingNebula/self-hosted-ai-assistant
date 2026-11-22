@@ -1,0 +1,59 @@
+name: ci-api-types
+
+# Regenerates the OpenAPI schema and its TypeScript types, then fails if the
+# committed copies in packages/api-types drifted from the backend code. Runs
+# fully offline: no database, model server, or GPU involved. A backend change
+# can move the exported schema and a packages/api-types change can move the
+# generator or the committed output it is checked against - either can
+# introduce drift, so both trees gate this job.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/backend/**'
+      - 'packages/api-types/**'
+      - '.github/workflows/ci-api-types.yml'
+  pull_request:
+    paths:
+      - 'apps/backend/**'
+      - 'packages/api-types/**'
+      - '.github/workflows/ci-api-types.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  api-types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+        with:
+          python-version: '3.13'
+          enable-cache: true
+          cache-dependency-glob: apps/backend/uv.lock
+      - working-directory: apps/backend
+        run: |
+          uv sync --frozen
+          uv run python scripts/export_openapi.py --out ../../packages/api-types/openapi.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: packages/api-types/package-lock.json
+      - working-directory: packages/api-types
+        run: |
+          npm ci
+          npm run generate
+      - run: git diff --exit-code -- packages/api-types
+      - if: failure()
+        run: |
+          echo "::error::packages/api-types is out of date with the backend API."
+          echo "Regenerate and commit it:"
+          echo "  cd apps/backend && uv run python scripts/export_openapi.py --out ../../packages/api-types/openapi.json"
+          echo "  cd ../../packages/api-types && npm ci && npm run generate"

@@ -1,0 +1,78 @@
+# ── Secrets & environment ────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.local
+
+# ── Python ─────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ruff_cache/
+
+# Playwright browser artifacts (screenshots, console logs) from local UI checks.
+.playwright-mcp/
+.playwright-cli/
+.mypy_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+
+# ── Node / Next.js ─────────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+.eslintcache
+playwright-report/
+test-results/
+
+# ── Runtime data, uploads & vector/object storage (never commit) ───────────
+# Anchored with a leading slash: these are directories a running stack creates
+# at the repo root. Unanchored, each would match a directory of that name at ANY
+# depth - "storage/" silently swallowed the apps/backend/app/storage source
+# package, and "data/" would do the same to a tests/data fixture directory.
+/data/
+/uploads/
+/sessions/
+/storage/
+/qdrant_storage/
+/minio_data/
+/postgres_data/
+# Where `make backup` writes by default: database dumps, vector snapshots and
+# uploaded file bytes. Real data, often large, and never part of the source.
+/backups/
+
+# ── Local model weights (can be gigabytes) ─────────────────────────────────
+*.gguf
+*.bin
+*.safetensors
+ollama/models/
+
+# ── Logs ───────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── OS / IDE noise ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.stackdump
+
+# Records which commit the local containers' images were built from, so a
+# deploy can tell a dependency change from an application-code change. It
+# describes one machine's containers, never the source tree.
+.deploy-stamp
+
+# Scratch OpenAPI exports. The committed schema lives at
+# packages/api-types/openapi.json; anything else is a throwaway from running the
+# exporter to a stray path.
+.openapi.export.json

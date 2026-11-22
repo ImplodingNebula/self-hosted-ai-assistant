@@ -1,0 +1,45 @@
+{
+  "_comment": "Fixture record corpus for RAG tests: small, factual, distinct records so exact-text retrieval and citation assertions are deterministic. Facts are invented for a fictional company.",
+  "records": [
+    {
+      "id": "rec-1001",
+      "title": "Refund policy",
+      "text": "Orders can be refunded within 30 days of delivery. Refunds are issued to the original payment method within 5 business days of approval. Opened consumables are not eligible for refunds."
+    },
+    {
+      "id": "rec-1002",
+      "title": "Shipping regions",
+      "text": "Standard shipping covers the UAE, Saudi Arabia, and Qatar. Express shipping is available only inside the UAE and delivers within 2 business days. International shipping beyond the GCC is not offered."
+    },
+    {
+      "id": "rec-1003",
+      "title": "Support hours",
+      "text": "The support desk answers tickets from Sunday to Thursday, 9:00 to 18:00 Gulf Standard Time. Tickets opened outside these hours receive a first response the next working day."
+    },
+    {
+      "id": "rec-1004",
+      "title": "Warranty terms",
+      "text": "Hardware carries a 24 month limited warranty covering manufacturing defects. Water damage and unauthorized repairs void the warranty. Warranty claims require the original order number."
+    },
+    {
+      "id": "rec-1005",
+      "title": "Account deletion",
+      "text": "Account deletion is permanent and takes effect within 72 hours of the request. Order history is retained for 7 years for tax compliance, detached from personal identifiers."
+    },
+    {
+      "id": "rec-1006",
+      "title": "Subscription tiers",
+      "text": "The Basic tier is free and includes community support. The Pro tier costs 49 dirhams per month and adds priority support and API access. The Enterprise tier is priced per contract."
+    },
+    {
+      "id": "rec-1007",
+      "title": "API rate limits",
+      "text": "Pro tier API keys are limited to 600 requests per minute. Exceeding the limit returns HTTP 429 with a Retry-After header. Enterprise keys have negotiated limits starting at 5000 requests per minute."
+    },
+    {
+      "id": "rec-1008",
+      "title": "Data residency",
+      "text": "Customer data is stored in the me-central-1 region. Backups replicate to me-south-1 nightly. Data never leaves the Middle East regions without written customer consent."
+    }
+  ]
+}

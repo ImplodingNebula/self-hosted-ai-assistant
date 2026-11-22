@@ -1,0 +1,53 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/apps/frontend"
+    # Daily made sense on a mostly-empty catalog; the dependency set is wide
+    # now and a daily cadence produced far more open pull requests than a
+    # weekly one would, for no earlier a fix - patches queue for at most a
+    # week either way.
+    schedule: { interval: "weekly" }
+    open-pull-requests-limit: 10
+    groups:
+      # Keep the Next.js/React ecosystem version-matched; bump as one PR.
+      nextjs-ecosystem:
+        patterns: ["next", "react", "react-dom", "eslint-config-next"]
+      # The editor ships as one package family of many small pieces
+      # (lexical plus several @lexical/* scoped packages); grouping them
+      # avoids a separate pull request per piece for what is really one
+      # version bump.
+      lexical:
+        patterns: ["lexical", "@lexical/*"]
+      # Everything else that is not a major version bump lands together as
+      # one weekly pull request per directory, rather than one per package.
+      # Security updates are excluded from this group (applies-to scopes it
+      # to version updates only) so a disclosed advisory still opens its own
+      # pull request immediately instead of waiting to be swept in here.
+      npm-minor-patch:
+        applies-to: "version-updates"
+        update-types: ["minor", "patch"]
+    ignore:
+      # @types/node tracks the Node major line; ignore its major bumps so
+      # Dependabot cannot push the type defs ahead of the Node 22 runtime (a
+      # higher major type-checks against APIs the runtime does not have).
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # TypeScript 7 is the native (Go) rewrite; the ESLint/Next toolchain still
+      # peer-pins typescript <6.1 (@typescript-eslint/tsconfig-utils), and a 7.x
+      # bump breaks `npm ci` outright. Ignore its major bumps until the toolchain
+      # supports it; minor/patch bumps within the 6.x line still flow.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "pip"
+    directory: "/apps/backend"
+    schedule: { interval: "weekly" }
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule: { interval: "weekly" }
+
+  - package-ecosystem: "docker"
+    directory: "/infra"
+    schedule: { interval: "weekly" }

@@ -1,0 +1,59 @@
+# Minimal authenticating front for a model server on a cloud GPU pod.
+#
+# Copy this onto the pod as `Caddyfile`, then run it with the token in the
+# environment:
+#
+#   OLLAMA_PROXY_TOKEN=$(openssl rand -hex 32) caddy run --config Caddyfile
+#
+# It exists because the model server has no authentication of its own, and a
+# pod's exposed port is a public address. See README.md in this directory for
+# the whole arrangement, including binding the model server to loopback - which
+# is what makes this proxy the only way in rather than merely one of two.
+
+{
+	# The pod provider's own proxy terminates TLS, so this listener serves plain
+	# HTTP on the pod's exposed port. Without this, Caddy would try to obtain a
+	# certificate for a hostname it does not own and fail to start.
+	auto_https off
+}
+
+# The port the pod exposes. Change it to whatever the pod actually publishes;
+# the model server itself is on 11435, reachable only from inside the pod.
+:11434 {
+	# The token is read from the environment rather than written here, so this
+	# file stays safe to copy around. A proxy started WITHOUT the variable must
+	# be loudly broken, not quietly permissive: Caddy substitutes an unset
+	# variable with an empty string at config load, so this matcher becomes a
+	# constant - true only when no token was provided - and the handler below
+	# then refuses every request until the proxy is restarted with one. (A hex
+	# token never needs escaping inside the quoted comparison.) Confirm an
+	# unauthenticated request gets a 401 before pointing anything at the address
+	# (README.md has the two curl commands).
+	@tokenless expression `"{$OLLAMA_PROXY_TOKEN}" == ""`
+	handle @tokenless {
+		respond "The proxy token is not configured; refusing all requests. Set OLLAMA_PROXY_TOKEN and restart the proxy." 500
+	}
+
+	@authorized header Authorization "Bearer {$OLLAMA_PROXY_TOKEN}"
+
+	handle @authorized {
+		reverse_proxy 127.0.0.1:11435 {
+			# Model responses arrive as a stream of newline-delimited JSON, which
+			# is not one of the content types Caddy stops buffering on its own.
+			# Without this, a whole generation is held back and delivered at the
+			# end - the answer still arrives, but nothing appears while it is
+			# being written.
+			flush_interval -1
+
+			# The credential authenticated the request here and has no meaning
+			# further down; the model server neither reads nor needs it.
+			header_up -Authorization
+		}
+	}
+
+	# Everything else, including a request carrying no Authorization header at
+	# all, is refused before it reaches the model server.
+	handle {
+		respond "Unauthorized" 401
+	}
+}

@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design prototypes - AI Chatbot Platform</title>
+<style>
+  /* =====================================================================
+     Theme gallery. Deliberately neutral: a monochrome frame that favors
+     no theme, legible in light and dark via prefers-color-scheme.
+     Swatch values are hardcoded from each theme's tokens file
+     (../tokens/*.css; Porcelain's live in porcelain.html).
+     ===================================================================== */
+  :root {
+    --g-bg: #fafafa;
+    --g-card: #ffffff;
+    --g-text: #1c1c1c;
+    --g-text-2: #6b6b6b;
+    --g-line: #e3e3e3;
+    --g-line-hover: #b5b5b5;
+    --g-chip-line: rgba(0, 0, 0, .14);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --g-bg: #141414;
+      --g-card: #1c1c1c;
+      --g-text: #ececec;
+      --g-text-2: #9b9b9b;
+      --g-line: #2d2d2d;
+      --g-line-hover: #5a5a5a;
+      --g-chip-line: rgba(255, 255, 255, .16);
+    }
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--g-bg);
+    color: var(--g-text);
+    font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--g-text); outline-offset: 3px; border-radius: 4px; }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 56px 24px 72px; }
+
+  /* ---------- header ---------- */
+  header { margin-bottom: 8px; }
+  header h1 { font-size: 22px; font-weight: 650; letter-spacing: -.01em; }
+  header .lede { margin-top: 8px; color: var(--g-text-2); max-width: 56ch; }
+  header .lede a { color: var(--g-text); text-underline-offset: 3px; }
+  header .legend {
+    margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--g-line);
+    color: var(--g-text-2); font-size: 12.5px; max-width: 72ch;
+  }
+
+  /* ---------- grid ---------- */
+  .grid {
+    margin-top: 28px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 16px;
+  }
+
+  /* ---------- card ---------- */
+  .card {
+    display: flex; flex-direction: column; gap: 10px;
+    background: var(--g-card);
+    border: 1px solid var(--g-line);
+    border-radius: 10px;
+    padding: 18px 18px 14px;
+    text-decoration: none;
+    transition: border-color 140ms ease;
+  }
+  .card:hover { border-color: var(--g-line-hover); }
+  .card:hover .open { color: var(--g-text); }
+
+  .head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .name { font-size: 15px; font-weight: 650; }
+
+  .badge {
+    font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--g-text-2);
+    border: 1px solid var(--g-line);
+    border-radius: 999px;
+    padding: 1px 8px 2px;
+    white-space: nowrap;
+  }
+
+  .dots { display: inline-flex; align-items: center; gap: 5px; }
+  .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    box-shadow: inset 0 0 0 1px var(--g-chip-line);
+  }
+
+  .mood { color: var(--g-text-2); font-size: 13px; line-height: 1.55; min-height: 2.4em; }
+
+  /* ---------- swatch strip ---------- */
+  .strip { display: flex; gap: 6px; margin-top: 2px; }
+  .cell { flex: 1; min-width: 0; }
+  .sw {
+    display: block; height: 34px; border-radius: 6px;
+    box-shadow: inset 0 0 0 1px var(--g-chip-line);
+  }
+  .lbl {
+    display: block; margin-top: 4px;
+    font-size: 9.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--g-text-2); text-align: center;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .open {
+    margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--g-line);
+    font-size: 12.5px; color: var(--g-text-2);
+    display: flex; justify-content: space-between; align-items: baseline;
+    transition: color 140ms ease;
+  }
+  .open .file { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px; }
+
+  footer {
+    margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--g-line);
+    color: var(--g-text-2); font-size: 12.5px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Design prototypes</h1>
+    <p class="lede">
+      One self-contained, pixel-real page per theme; the rules that generalize live in
+      <a href="../DESIGN.md">DESIGN.md</a>, and when prose and prototype disagree, the prototype wins.
+    </p>
+    <p class="legend">
+      Swatches show each theme's actual token values: app background, panel, text, accent, border.
+      Paired themes (Porcelain, Minimal) split every swatch diagonally - light upper-left, dark
+      lower-right. Phosphor's dots are its three accent variants: green, amber, red. Aurora (next)
+      is the default theme's reference; its panel swatch is the composer's translucent fill, since
+      its cards are lit panes rather than a panel colour.
+    </p>
+  </header>
+
+  <div class="grid">
+
+    <!-- 1. Porcelain -->
+    <a class="card" href="porcelain.html">
+      <div class="head">
+        <span class="name">Porcelain</span>
+        <span class="badge">paired</span>
+      </div>
+      <p class="mood">Warm, literate calm - the house style. Cream and bone in light; deep warm charcoal in dark.</p>
+      <div class="strip" role="img" aria-label="Porcelain key tokens, light and dark">
+        <span class="cell"><span class="sw" style="background:linear-gradient(135deg,#faf9f5 50%,#201e1a 50%)" title="--s-bg-app: #faf9f5 light / #201e1a dark"></span><span class="lbl">app</span></span>
+        <span class="cell"><span class="sw" style="background:linear-gradient(135deg,#f4f1ea 50%,#262420 50%)" title="--s-bg-panel: #f4f1ea light / #262420 dark"></span><span class="lbl">panel</span></span>
+        <span class="cell"><span class="sw" style="background:linear-gradient(135deg,#1f1d1a 50%,#ece9e2 50%)" title="--s-text: #1f1d1a light / #ece9e2 dark"></span><span class="lbl">text</span></span>
+        <span class="cell"><span class="sw" style="background:linear-gradient(135deg,#c15f3c 50%,#d97a54 50%)" title="--s-accent: #c15f3c light / #d97a54 dark"></span><span class="lbl">accent</span></span>
+        <span class="cell"><span class="sw" style="background:linear-gradient(135deg,#e4dfd4 50%,#3a372f 50%)" title="--s-border: #e4dfd4 light / #3a372f dark"></span><span class="lbl">border</span></span>
+      </div>
+      <span class="open"><span>View prototype</span><span class="file">porcelain.html</span></span>
+    </a>
+
+    <!-- 2. Minimal -->
+    <a class="card" href="minimal.html">
+      <div class="head">
+        <span class="name">Minimal</span>
+        <span class="badge">paired</span>
+      </div>
+      <p class="mood">Nothing but the conversation; for people who find personality themes noisy.</p>
+      <div class="strip" role="img" aria-label="Minimal key tokens, light and dark">
+        <span class="cell"><span class="sw" style="background:linear-gradient(135deg,#ffffff 50%,#111111 50%)" title="--s-bg-app: #ffffff light / #111111 dark"></span><span class="lbl">app</span></span>
+        <span class="cell"><span class="sw" style="background:linear-gradient(135deg,#f7f7f7 50%,#171717 50%)" title="--s-bg-panel: #f7f7f7 light / #171717 dark"></span><span class="lbl">panel</span></span>
+        <span class="cell"><span class="sw" style="background:linear-gradient(135deg,#111111 50%,#ededed 50%)" title="--s-text: #111111 light / #ededed dark"></span><span class="lbl">text</span></span>
+        <span class="cell"><span class="sw" style="background:linear-gradient(135deg,#0b57d0 50%,#8ab4f8 50%)" title="--s-accent: #0b57d0 light / #8ab4f8 dark"></span><span class="lbl">accent</span></span>
+        <span class="cell"><span class="sw" style="background:linear-gradient(135deg,#e4e4e4 50%,#2e2e2e 50%)" title="--s-border: #e4e4e4 light / #2e2e2e dark"></span><span class="lbl">border</span></span>
+      </div>
+      <span class="open"><span>View prototype</span><span class="file">minimal.html</span></span>
+    </a>
+
+    <!-- 3. Phosphor -->
+    <a class="card" href="phosphor.html">
+      <div class="head">
+        <span class="name">Phosphor</span>
+        <span class="badge">dark</span>
+        <span class="dots" title="Accent variants: green #4dff88, amber #ffb224, red #ff5240">
+          <span class="dot" style="background:#4dff88"></span>
+          <span class="dot" style="background:#ffb224"></span>
+          <span class="dot" style="background:#ff5240"></span>
+        </span>
+      </div>
+      <p class="mood">A CRT terminal that grew up - the machine-room theme.</p>
+      <div class="strip" role="img" aria-label="Phosphor key tokens, green variant">
+        <span class="cell"><span class="sw" style="background:#050b07" title="--s-bg-app: #050b07"></span><span class="lbl">app</span></span>
+        <span class="cell"><span class="sw" style="background:#0a130c" title="--s-bg-panel: #0a130c"></span><span class="lbl">panel</span></span>
+        <span class="cell"><span class="sw" style="background:#cdf5d6" title="--s-text: #cdf5d6"></span><span class="lbl">text</span></span>
+        <span class="cell"><span class="sw" style="background:#4dff88" title="--s-accent: #4dff88"></span><span class="lbl">accent</span></span>
+        <span class="cell"><span class="sw" style="background:#1c3323" title="--s-border: #1c3323"></span><span class="lbl">border</span></span>
+      </div>
+      <span class="open"><span>View prototype</span><span class="file">phosphor.html</span></span>
+    </a>
+
+    <!-- 4. Aurora (next): the adopted reference for the default theme -->
+    <a class="card" href="aurora-next.html">
+      <div class="head">
+        <span class="name">Aurora (next)</span>
+        <span class="badge">default</span>
+        <span class="badge">dark</span>
+      </div>
+      <p class="mood">A sky in the margins that takes the colour of the running step; a timeline turn and a serif answer. Covers sign-in, boot, new chat and the console.</p>
+      <div class="strip" role="img" aria-label="Aurora (next) key tokens">
+        <span class="cell"><span class="sw" style="background:#0b0d20" title="--s-bg-app: #0b0d20"></span><span class="lbl">app</span></span>
+        <span class="cell"><span class="sw" style="background:linear-gradient(180deg,rgba(30,35,76,.60),rgba(14,17,42,.70)) #0b0d20" title="--c-composer-bg: the composer's translucent gradient, shown over the app base"></span><span class="lbl">panel</span></span>
+        <span class="cell"><span class="sw" style="background:#edeff9" title="--s-text: #edeff9"></span><span class="lbl">text</span></span>
+        <span class="cell"><span class="sw" style="background:#45e0c8" title="--s-accent: #45e0c8"></span><span class="lbl">accent</span></span>
+        <span class="cell"><span class="sw" style="background:linear-gradient(rgba(255,255,255,.09),rgba(255,255,255,.09)) #0b0d20" title="--s-border: rgba(255,255,255,.09), shown over the app base"></span><span class="lbl">border</span></span>
+      </div>
+      <span class="open"><span>View prototype</span><span class="file">aurora-next.html</span></span>
+    </a>
+
+    <!-- 4b. Aurora: the earlier skeleton the other themes derive from -->
+    <a class="card" href="aurora.html">
+      <div class="head">
+        <span class="name">Aurora</span>
+        <span class="badge">dark</span>
+        <span class="badge">earlier skeleton</span>
+      </div>
+      <p class="mood">Ambient instrument - the app as a quiet aurora you work in front of. Superseded by Aurora (next) wherever the two overlap.</p>
+      <div class="strip" role="img" aria-label="Aurora key tokens">
+        <span class="cell"><span class="sw" style="background:#0b0d20" title="--s-bg-app: #0b0d20"></span><span class="lbl">app</span></span>
+        <span class="cell"><span class="sw" style="background:linear-gradient(rgba(18,21,46,.62),rgba(18,21,46,.62)) #0b0d20" title="--s-bg-panel: rgba(18,21,46,.62) glass, shown over the app base"></span><span class="lbl">panel</span></span>
+        <span class="cell"><span class="sw" style="background:#edeff9" title="--s-text: #edeff9"></span><span class="lbl">text</span></span>
+        <span class="cell"><span class="sw" style="background:#45e0c8" title="--s-accent: #45e0c8"></span><span class="lbl">accent</span></span>
+        <span class="cell"><span class="sw" style="background:linear-gradient(rgba(255,255,255,.10),rgba(255,255,255,.10)) #0b0d20" title="--s-border: rgba(255,255,255,.10), shown over the app base"></span><span class="lbl">border</span></span>
+      </div>
+      <span class="open"><span>View prototype</span><span class="file">aurora.html</span></span>
+    </a>
+
+    <!-- 5. Manuscript -->
+    <a class="card" href="manuscript.html">
+      <div class="head">
+        <span class="name">Manuscript</span>
+        <span class="badge">light</span>
+      </div>
+      <p class="mood">A well-set book page; the theme for long reading.</p>
+      <div class="strip" role="img" aria-label="Manuscript key tokens">
+        <span class="cell"><span class="sw" style="background:#f6efe0" title="--s-bg-app: #f6efe0"></span><span class="lbl">app</span></span>
+        <span class="cell"><span class="sw" style="background:#efe6d2" title="--s-bg-panel: #efe6d2"></span><span class="lbl">panel</span></span>
+        <span class="cell"><span class="sw" style="background:#262019" title="--s-text: #262019"></span><span class="lbl">text</span></span>
+        <span class="cell"><span class="sw" style="background:#6d1a1a" title="--s-accent: #6d1a1a"></span><span class="lbl">accent</span></span>
+        <span class="cell"><span class="sw" style="background:#ddd2b8" title="--s-border: #ddd2b8"></span><span class="lbl">border</span></span>
+      </div>
+      <span class="open"><span>View prototype</span><span class="file">manuscript.html</span></span>
+    </a>
+
+    <!-- 6. Nocturne -->
+    <a class="card" href="nocturne.html">
+      <div class="head">
+        <span class="name">Nocturne</span>
+        <span class="badge">dark</span>
+        <span class="badge">oled</span>
+      </div>
+      <p class="mood">Maximum restraint for night work; true black, one live color.</p>
+      <div class="strip" role="img" aria-label="Nocturne key tokens">
+        <span class="cell"><span class="sw" style="background:#000000" title="--s-bg-app: #000000"></span><span class="lbl">app</span></span>
+        <span class="cell"><span class="sw" style="background:#0a0a0a" title="--s-bg-panel: #0a0a0a"></span><span class="lbl">panel</span></span>
+        <span class="cell"><span class="sw" style="background:#ededed" title="--s-text: #ededed"></span><span class="lbl">text</span></span>
+        <span class="cell"><span class="sw" style="background:#a78bfa" title="--s-accent: #a78bfa"></span><span class="lbl">accent</span></span>
+        <span class="cell"><span class="sw" style="background:#1f1f1f" title="--s-border: #1f1f1f"></span><span class="lbl">border</span></span>
+      </div>
+      <span class="open"><span>View prototype</span><span class="file">nocturne.html</span></span>
+    </a>
+
+    <!-- 7. Abyss -->
+    <a class="card" href="abyss.html">
+      <div class="head">
+        <span class="name">Abyss</span>
+        <span class="badge">dark</span>
+      </div>
+      <p class="mood">Deep-sea instrument panel; pressure-calm, bioluminescent.</p>
+      <div class="strip" role="img" aria-label="Abyss key tokens">
+        <span class="cell"><span class="sw" style="background:#050c14" title="--s-bg-app: #050c14"></span><span class="lbl">app</span></span>
+        <span class="cell"><span class="sw" style="background:#081220" title="--s-bg-panel: #081220"></span><span class="lbl">panel</span></span>
+        <span class="cell"><span class="sw" style="background:#ddedf7" title="--s-text: #ddedf7"></span><span class="lbl">text</span></span>
+        <span class="cell"><span class="sw" style="background:#3ee6cf" title="--s-accent: #3ee6cf"></span><span class="lbl">accent</span></span>
+        <span class="cell"><span class="sw" style="background:#14283b" title="--s-border: #14283b"></span><span class="lbl">border</span></span>
+      </div>
+      <span class="open"><span>View prototype</span><span class="file">abyss.html</span></span>
+    </a>
+
+    <!-- 8. Grove -->
+    <a class="card" href="grove.html">
+      <div class="head">
+        <span class="name">Grove</span>
+        <span class="badge">light</span>
+      </div>
+      <p class="mood">A reading nook by a window - moss, sage, cream, bark.</p>
+      <div class="strip" role="img" aria-label="Grove key tokens">
+        <span class="cell"><span class="sw" style="background:#f7f4e9" title="--s-bg-app: #f7f4e9"></span><span class="lbl">app</span></span>
+        <span class="cell"><span class="sw" style="background:#e8edda" title="--s-bg-panel: #e8edda"></span><span class="lbl">panel</span></span>
+        <span class="cell"><span class="sw" style="background:#3e332a" title="--s-text: #3e332a"></span><span class="lbl">text</span></span>
+        <span class="cell"><span class="sw" style="background:#4a7c59" title="--s-accent: #4a7c59"></span><span class="lbl">accent</span></span>
+        <span class="cell"><span class="sw" style="background:#d9dcc6" title="--s-border: #d9dcc6"></span><span class="lbl">border</span></span>
+      </div>
+      <span class="open"><span>View prototype</span><span class="file">grove.html</span></span>
+    </a>
+
+    <!-- 9. Ember -->
+    <a class="card" href="ember.html">
+      <div class="head">
+        <span class="name">Ember</span>
+        <span class="badge">dark</span>
+      </div>
+      <p class="mood">Dusk and firelight; the cozy dark theme for people who find OLED themes cold.</p>
+      <div class="strip" role="img" aria-label="Ember key tokens">
+        <span class="cell"><span class="sw" style="background:#241a1a" title="--s-bg-app: #241a1a"></span><span class="lbl">app</span></span>
+        <span class="cell"><span class="sw" style="background:#2b201f" title="--s-bg-panel: #2b201f"></span><span class="lbl">panel</span></span>
+        <span class="cell"><span class="sw" style="background:#f3e9df" title="--s-text: #f3e9df"></span><span class="lbl">text</span></span>
+        <span class="cell"><span class="sw" style="background:#e08d4d" title="--s-accent: #e08d4d"></span><span class="lbl">accent</span></span>
+        <span class="cell"><span class="sw" style="background:#43322e" title="--s-border: #43322e"></span><span class="lbl">border</span></span>
+      </div>
+      <span class="open"><span>View prototype</span><span class="file">ember.html</span></span>
+    </a>
+
+    <!-- 10. Sorbet -->
+    <a class="card" href="sorbet.html">
+      <div class="head">
+        <span class="name">Sorbet</span>
+        <span class="badge">light</span>
+      </div>
+      <p class="mood">Friendly and light-hearted without sacrificing legibility - the approachable theme.</p>
+      <div class="strip" role="img" aria-label="Sorbet key tokens">
+        <span class="cell"><span class="sw" style="background:#fdf9f4" title="--s-bg-app: #fdf9f4"></span><span class="lbl">app</span></span>
+        <span class="cell"><span class="sw" style="background:#f8f0e6" title="--s-bg-panel: #f8f0e6"></span><span class="lbl">panel</span></span>
+        <span class="cell"><span class="sw" style="background:#2a2633" title="--s-text: #2a2633"></span><span class="lbl">text</span></span>
+        <span class="cell"><span class="sw" style="background:#7a5ea8" title="--s-accent: #7a5ea8"></span><span class="lbl">accent</span></span>
+        <span class="cell"><span class="sw" style="background:#e8dee4" title="--s-border: #e8dee4"></span><span class="lbl">border</span></span>
+      </div>
+      <span class="open"><span>View prototype</span><span class="file">sorbet.html</span></span>
+    </a>
+
+  </div>
+
+  <footer>
+    Token sources: <a href="../tokens/">tokens/</a> (Porcelain's block lives inline in
+    <a href="porcelain.html">porcelain.html</a>). Build order and acceptance criteria:
+    <a href="../IMPLEMENTATION.md">IMPLEMENTATION.md</a>.
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,83 @@
+/* =====================================================================
+   Nocturne - theme tokens (dark, OLED; single-mode)
+
+   Mood: maximum restraint for night work. True black surfaces, hairline
+   borders, one live color - an electric violet that carries every
+   interactive state. Everything is outlined; nothing is filled except
+   the send and approve buttons. On OLED screens the app merges with
+   the bezel; the composer's focus ring is the brightest thing on
+   screen.
+
+   Checked contrast (WCAG 2.x relative-luminance ratios):
+     --s-text      #ededed on --s-bg-app   #000000 = 17.9:1  (AA 4.5:1 pass)
+     --s-text      #ededed on --s-bg-panel #0a0a0a = 16.9:1  (AA 4.5:1 pass)
+     --s-text-2    #a3a3a3 on --s-bg-app   #000000 =  8.3:1  (AA 4.5:1 pass)
+     --s-text-2    #a3a3a3 on --s-bg-panel #0a0a0a =  7.9:1  (AA 4.5:1 pass)
+     --s-text-3    #6f6f6f on --s-bg-app   #000000 =  4.2:1  (3:1 decorative pass)
+     --s-on-accent #0e0618 on --s-accent   #a78bfa =  7.3:1  (AA 4.5:1 pass)
+     --s-accent    #a78bfa as text on      #000000 =  7.7:1  (AA 4.5:1 pass)
+     --s-focus     #c9b8ff on              #000000 = 11.8:1  (3:1 non-text pass)
+     status hues on #000000: info 10.0:1, ok 11.0:1, warn 10.9:1,
+     danger 7.4:1 (all AA 4.5:1 pass as text on the app surface)
+
+   Single-mode theme: html[data-mode] is ignored - no mode variant
+   selectors. No accent variants either (the one violet IS the theme).
+   ===================================================================== */
+
+html[data-theme="nocturne"] {
+  /* tier 1 - primitives */
+  --p-black: #000000;
+  --p-carbon-0: #0a0a0a; --p-carbon-1: #0f0f0f; --p-carbon-2: #141414;
+  --p-hairline-0: #1f1f1f; --p-hairline-1: #303030;
+  --p-grey-0: #ededed; --p-grey-1: #a3a3a3; --p-grey-2: #6f6f6f;
+  --p-violet-0: #a78bfa;    /* the one live color */
+  --p-violet-1: #bda6ff;    /* hover */
+  --p-violet-2: #c9b8ff;    /* focus - the brightest thing on screen */
+  --p-violet-dim: #3c2f63;  /* structural violet: idle rules, filament rest */
+  --p-violet-ink: #0e0618;  /* text on a violet fill */
+
+  /* tier 2 - semantic */
+  --s-bg-app: var(--p-black);
+  --s-bg-panel: var(--p-carbon-0);
+  --s-bg-raised: var(--p-carbon-1);
+  --s-bg-inset: var(--p-carbon-2);
+  --s-text: var(--p-grey-0);
+  --s-text-2: var(--p-grey-1);
+  --s-text-3: var(--p-grey-2);
+  --s-text-inverse: var(--p-carbon-0);
+  --s-accent: var(--p-violet-0);
+  --s-accent-hover: var(--p-violet-1);
+  --s-on-accent: var(--p-violet-ink);
+  --s-info: #8ab4f8; --s-ok: #6fcf8f; --s-warn: #e0b45c; --s-danger: #f47069;
+  --s-border: var(--p-hairline-0);
+  --s-border-strong: var(--p-hairline-1);
+  --s-focus: var(--p-violet-2);
+  /* the pastel info/danger fills hold #fff to 2.1:1 / 2.9:1; carbon ink
+     reads 9.4:1 on info, 7.0:1 on danger */
+  --s-on-status: var(--s-text-inverse);
+  --s-scrim: rgba(0, 0, 0, .4);
+  --s-shadow: rgba(0, 0, 0, .14);
+
+  /* tier 3 - component (outline voice: resting fills go transparent) */
+  --c-bubble-user-bg: transparent;
+  --c-bubble-user-fg: var(--s-text);
+  --c-bubble-user-line: #2a2a2a;   /* theme-specific: the user-turn outline */
+  --c-thinking-bg: transparent;
+  --c-thinking-rule: var(--p-violet-dim);
+  --c-tool-bg: transparent;
+  --c-citation-bg: transparent;
+  --c-code-bg: #0c0c0c;
+  --c-code-fg: #e2e2e2;
+
+  /* shape + motion */
+  --radius-s: 6px; --radius-m: 10px; --radius-l: 10px;
+  --radius-bubble: 10px;
+  --clip-panel: none;
+  --dur-fast: 120ms; --dur-base: 200ms; --dur-slow: 320ms;
+  --ease-standard: cubic-bezier(.4,0,.2,1);
+  --ease-entrance: cubic-bezier(.16,1,.3,1);
+  --ease-spring: cubic-bezier(.34,1.4,.64,1);
+  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-prose: var(--font-ui);
+  --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+}

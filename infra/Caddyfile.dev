@@ -1,0 +1,28 @@
+# Dev reverse proxy sketch. NOT yet wired into compose - the `caddy` service is
+# added in ROADMAP Phase 8; until then the backend and frontend are reached on
+# their own published ports. HTTP only in dev; prod uses auto-HTTPS.
+{
+	auto_https off
+}
+
+:80 {
+	# Backend API + SSE streaming: flush_interval -1 disables proxy buffering so
+	# tokens reach the browser immediately. Only the versioned API prefix goes to
+	# the backend - Next.js route handlers (e.g. /api/chat, the frontend's own
+	# proxy to the backend) must keep resolving to the frontend.
+	handle /api/v1/* {
+		reverse_proxy backend:8000 {
+			flush_interval -1
+		}
+	}
+
+	handle /healthz {
+		reverse_proxy backend:8000
+	}
+
+	# Everything else (including /api/chat and other Next.js route handlers) →
+	# the Next.js frontend.
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

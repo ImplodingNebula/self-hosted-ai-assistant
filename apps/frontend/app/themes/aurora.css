@@ -1,0 +1,812 @@
+/* =====================================================================
+   Aurora - theme tokens (default theme)
+   A deep indigo night with a sky in the margins. The sky (components/sky.tsx)
+   lives behind the app, vivid at the edges and held back from the reading
+   column by a veil; it takes the colour of the step that is running and
+   rests at idle. Glass is three jobs here, and only one of them blurs
+   (docs/design/DESIGN.md, "Surfaces: glass is three jobs"):
+     - the sidebar and the console rail carry the one backdrop blur, under a
+       shade that deepens toward the outer edge;
+     - the composer is a pane straight onto the sky (the veil is opened
+       behind it), so a translucent fill is all the frost it needs;
+     - cards (bubble, sources, code, confirm, console rows) sit on the veil,
+       so they are lit panes: a light fill and an edge light, no filter;
+     - floaters (menus, popovers, the jump button, the dialog) pass over
+       text, so they carry a real 14px blur, and their hosts carry none.
+
+   Modes / accents: dark only. data-mode and data-accent are ignored.
+   data-sky (shader | css | off) is set by the app, never chosen.
+
+   Selector note: keyed on [data-theme="aurora"] (not html[...]) so the
+   same token map resolves both on <html> and on the theme-picker
+   swatches, which scope a nested data-theme to preview real colors.
+
+   Checked contrast ratios (WCAG relative luminance) against the night
+   base #0b0d20, a lit pane (#0b0d20 under 4% white = #151729), and the
+   composer's brightest stop (#1e234c at 60% over the night = #161a3a):
+     --s-text      #edeff9  16.8:1 / 15.4:1 / 14.7:1  (AA >= 4.5 pass)
+     --s-text-2    #a9b0d4   9.0:1 /  8.3:1 /  7.9:1  (AA >= 4.5 pass)
+     --s-text-3    #7e86b0   5.4:1 /  5.0:1 /  4.8:1  (>= 3 pass; >= 4.5 too)
+     --s-on-accent #04261f  on accent #45e0c8  9.8:1    (AA >= 4.5 pass)
+     --s-accent    #45e0c8  11.7:1 on the night (focus ring, >= 3 pass)
+     --s-danger    #f0718a   6.8:1 as text; night ink on it 6.8:1 (AA pass)
+     --s-info      #6f9cf2   7.1:1 as text; night ink on it 7.1:1 (AA pass)
+     --c-code-fg   #dfe4f5  14.2:1 on the code pane (AA pass)
+   The reading column sits under the veil (84% night), so every pair reads
+   at or above the night-base figure there.
+   ===================================================================== */
+
+[data-theme="aurora"] {
+  /* tier 1 - primitives */
+  --p-night-0: #0b0d20; --p-night-1: #12152e; --p-night-2: #191d3c;
+  --p-night-3: #060812;
+  --p-star-0: #edeff9; --p-star-1: #a9b0d4; --p-star-2: #7e86b0;
+  --p-aurora-violet: #9a8afb;
+  --p-aurora-teal: #45e0c8; --p-aurora-teal-bright: #6ceedd;
+  --p-aurora-magenta: #ea7fdc;
+
+  /* tier 2 - semantic */
+  --s-bg-app: var(--p-night-0);
+  --s-bg-panel: var(--p-night-1);
+  --s-bg-raised: var(--p-night-2);
+  --s-bg-inset: var(--p-night-3);
+  --s-text: var(--p-star-0);
+  --s-text-2: var(--p-star-1);
+  --s-text-3: var(--p-star-2);
+  --s-text-inverse: #0b0d20;
+  --s-accent: var(--p-aurora-teal);
+  --s-accent-hover: var(--p-aurora-teal-bright);
+  --s-on-accent: #04261f;
+  --s-info: #6f9cf2; --s-ok: #5fe0a0; --s-warn: #efb964; --s-danger: #f0718a;
+  --s-border: rgba(255, 255, 255, .09);
+  --s-border-strong: rgba(255, 255, 255, .16);
+  --s-focus: var(--p-aurora-teal);
+  /* #fff reads under 4.5:1 on the info and danger fills; night ink reads
+     7.1:1 and 6.8:1 */
+  --s-on-status: var(--s-text-inverse);
+  --s-scrim: rgba(0, 0, 0, .4);
+  --s-shadow: rgba(2, 4, 14, .5);
+
+  /* tier 3 - component. Lit panes: a 4% light fill and an edge light, on
+     the veil where nothing sharp is ever behind them. */
+  --c-card-bg: rgba(255, 255, 255, .04);
+  /* a solid navy pane: the teal wash it had was louder than the thread */
+  --c-bubble-user-bg: color-mix(in srgb, var(--p-aurora-teal) 11%, var(--p-night-1));
+  --c-bubble-user-fg: var(--s-text);
+  /* the thinking row's body is bare text on the rail: no rule, no fill */
+  --c-thinking-bg: transparent;
+  --c-quote-bg: color-mix(in srgb, var(--p-aurora-teal) 16%, var(--p-night-1));
+  --c-quote-bg-hover: color-mix(in srgb, var(--p-aurora-teal) 26%, var(--p-night-1));
+  --c-quote-bg-active: color-mix(in srgb, var(--p-aurora-teal) 34%, var(--p-night-1));
+  --c-passage-light: color-mix(in srgb, var(--p-aurora-teal) 34%, transparent);
+  --c-thinking-rule: transparent;
+  --c-tool-bg: var(--c-card-bg);
+  /* chips and code stand on solid ground: the sky through a code block is
+     a texture under every token */
+  --c-citation-bg: var(--s-bg-panel);
+  --c-code-bg: #080a1a;
+  --c-code-fg: #dfe4f5;
+  /* inline code is a chip on the panel: the inset is darker than the night
+     and would read as a hole in the lit column */
+  --c-inline-code-bg: var(--s-bg-panel);
+  --c-confirm-bg: color-mix(in srgb, var(--c-step-confirm) 8%, rgba(255, 255, 255, .04));
+  --c-code-com: #7e86b0;
+  --c-code-key: #9a8afb;
+  --c-code-str: #6ceedd;
+  --c-code-num: #efb964;
+  --c-code-fn: #ea7fdc;
+  /* A lifted band and the strong line keep a table's grid legible on a
+     pane that is itself a light fill. */
+  --c-table-head-bg: rgba(255, 255, 255, .08);
+  --c-table-border: var(--s-border-strong);
+  /* step colours: what kind of work a step is (the rail glyph, and the sky) */
+  --c-step-thought: var(--p-aurora-violet);
+  --c-step-tool: var(--p-aurora-teal);
+  --c-step-confirm: var(--p-aurora-magenta);
+  --c-step-answer: var(--s-text-2);
+  --c-step-error: var(--s-danger);
+
+  /* the composer: a pane straight onto the sky. The fill is as thin as the
+     contrast floor allows at the sky's brightest; the placeholder steps up
+     one text tier to hold it. */
+  --c-composer-bg: linear-gradient(180deg, rgba(30, 35, 76, .60), rgba(14, 17, 42, .70));
+  --c-composer-placeholder: var(--s-text-2);
+  /* the activity panel on the console is the same pane, a touch heavier */
+  --c-activity-bg: linear-gradient(180deg, rgba(30, 35, 76, .62), rgba(14, 17, 42, .72));
+  /* the sign-in card is one glass card on the sky: the composer's pane over
+     the veil's pool, so, like the composer, no filter */
+  --c-login-bg: var(--c-composer-bg);
+  --c-login-border: var(--s-border-strong);
+
+  /* the sidebar's shade: deepens toward the outer edge, where the labels
+     start, and opens along the edge that meets the thread. The rail takes
+     the same token. */
+  --c-sidebar-bg: linear-gradient(90deg, rgba(11, 13, 32, .93) 0, rgba(11, 13, 32, .88) 45%,
+    rgba(12, 15, 36, .7) 80%, rgba(14, 17, 40, .46) 100%);
+  --c-topbar-bg: rgba(11, 13, 32, .7);
+
+  /* floaters: the one fill, carried by a real blur. A little lift keeps the
+     frost visible on a dark theme (a plain blur of dark averages to dark and
+     the panel reads opaque), but no more: lifted further, the sky's
+     brightest curtain came through as a wash the labels could not hold
+     against. The fill carries the rest of the contrast. */
+  --c-float-bg: rgba(16, 19, 46, .66);
+  --c-menu-bg: var(--c-float-bg);
+  --c-menu-backdrop: blur(16px) saturate(1.35) brightness(1.12);
+  /* the dialog is a touch denser: a destructive decision over dense text */
+  --c-dialog-bg: rgba(16, 19, 46, .74);
+  /* Pickers are top-layer and cannot carry a ::before frost, so glass would
+     read straight through them: they get the solid reduced-transparency fill
+     unconditionally. */
+  --c-picker-bg: #141730;
+
+  /* aurora extras: the recipes the flourish layer applies */
+  --a-side-filter: blur(22px) saturate(1.2);
+  --a-pane-edge: inset 0 0 0 1px rgba(255, 255, 255, .06), inset 0 1px 0 rgba(255, 255, 255, .09);
+  --a-sky-edge: inset 0 1px 0 rgba(255, 255, 255, .10), 0 12px 32px rgba(3, 4, 14, .32);
+  --a-glass-edge: inset 0 1px 0 rgba(255, 255, 255, .10), inset 0 0 0 1px rgba(255, 255, 255, .08);
+
+  /* the one face the theme adds: the answer column in a serif, at its own
+     size and measure; the shell keeps Geist at the body size */
+  --font-prose: var(--font-source-serif), "Iowan Old Style", Georgia, serif;
+  --text-prose: 16.5px;
+  --text-prose-line: 1.68;
+  --prose-measure: 68ch;
+
+  /* shape + motion (font tokens inherit the base sheet) */
+  --radius-s: 8px; --radius-m: 12px; --radius-l: 16px;
+  --radius-bubble: 14px;
+  --clip-panel: none;
+  --dur-fast: 120ms; --dur-base: 200ms; --dur-slow: 320ms;
+  --ease-standard: cubic-bezier(.4, 0, .2, 1);
+  --ease-entrance: cubic-bezier(.16, 1, .3, 1);
+  --ease-spring: cubic-bezier(.34, 1.4, .64, 1);
+}
+
+/* =====================================================================
+   The sky.
+
+   One fixed layer behind the shell (the shells sit at z-index 1 over it):
+   the shader canvas or the CSS curtains, and the constellations above
+   either. Which renderer runs is `data-sky` on the root, set by the app:
+     shader - one WebGL plane at half resolution (components/sky.tsx)
+     css    - three pre-blurred curtain layers, moving on transforms only
+     off    - the flat night: reduced transparency, or a low-power device
+   The running step's colour is `--sky-tint`, a registered property that
+   eases over 1.2s, so everything that borrows it (the horizon, the third
+   curtain) moves with the sky. Unlayered and unscoped by theme: the
+   element exists only while aurora is active.
+   ===================================================================== */
+
+/* Registered at the top level, outside any cascade layer. */
+@property --sky-tint { syntax: "<color>"; inherits: true; initial-value: #45e0c8; }
+/* the comet's angle round the activity panel (below): registered so it
+   interpolates rather than flipping at the keyframe's midpoint */
+@property --mm-ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+/* where the veil's window stands (hooks/use-veil-window): registered so the
+   window can travel with the composer box between a new chat and a thread */
+@property --pane-x { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --pane-b { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --pane-w { syntax: "<length>"; inherits: true; initial-value: 0px; }
+@property --pane-h { syntax: "<length>"; inherits: true; initial-value: 0px; }
+
+html[data-theme="aurora"] { transition: --sky-tint 1200ms var(--ease-standard); }
+
+.sky {
+  position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
+  background: var(--s-bg-app);
+  --sky-e: .36; --sky-tint: #45e0c8;
+  transition: --sky-tint 1200ms var(--ease-standard);
+}
+.sky canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+html[data-sky="shader"] .sky-gl { display: block; }
+/* the constellations: the one sharp layer over the soft sky */
+html:not([data-sky="off"]) .sky-stars { display: block; }
+html[data-sky="off"] .sky > * { display: none; }
+
+.sky-css {
+  position: absolute; inset: 0; display: none;
+  opacity: calc(.45 + .55 * var(--sky-e));
+  transform-origin: 50% 0; transform: scaleY(calc(.9 + .3 * var(--sky-e)));
+  transition: opacity 1200ms var(--ease-standard), transform 1600ms var(--ease-entrance);
+}
+html[data-sky="css"] .sky-css { display: block; }
+.sky-css i {
+  position: absolute; top: -12%; left: -60%; width: 220%; height: 125%; filter: blur(34px);
+  mix-blend-mode: screen; will-change: transform;
+  mask-image: linear-gradient(to bottom, #000 0, rgba(0, 0, 0, .8) 30%, rgba(0, 0, 0, .35) 65%, transparent 100%);
+}
+.sky-css i:nth-child(1) {
+  animation: sky-a 58s linear infinite alternate;
+  background: linear-gradient(97deg, transparent 0, rgba(69, 224, 200, .55) 5%, transparent 11%, transparent 19%,
+    rgba(154, 138, 251, .5) 27%, transparent 36%, rgba(69, 224, 200, .45) 47%, transparent 53%, transparent 63%,
+    rgba(234, 127, 220, .4) 71%, transparent 80%, rgba(69, 224, 200, .5) 90%, transparent 97%);
+}
+.sky-css i:nth-child(2) {
+  animation: sky-b 74s linear infinite alternate; height: 100%;
+  background: linear-gradient(84deg, transparent 0, rgba(154, 138, 251, .45) 9%, transparent 17%, rgba(69, 224, 200, .4) 31%,
+    transparent 39%, transparent 52%, rgba(154, 138, 251, .5) 60%, transparent 70%, rgba(69, 224, 200, .4) 83%, transparent 92%);
+}
+.sky-css i:nth-child(3) {
+  animation: sky-c 41s linear infinite alternate; height: 80%; filter: blur(22px);
+  background: linear-gradient(92deg, transparent 0, transparent 12%, color-mix(in srgb, var(--sky-tint) 60%, transparent) 20%,
+    transparent 27%, transparent 44%, color-mix(in srgb, var(--sky-tint) 55%, transparent) 55%, transparent 61%,
+    transparent 76%, color-mix(in srgb, var(--sky-tint) 60%, transparent) 86%, transparent 94%);
+}
+@keyframes sky-a { from { transform: translate3d(-9%, 0, 0) skewX(-5deg); } to { transform: translate3d(9%, 2%, 0) skewX(4deg); } }
+@keyframes sky-b { from { transform: translate3d(11%, 1%, 0) skewX(6deg); } to { transform: translate3d(-10%, 0, 0) skewX(-4deg); } }
+@keyframes sky-c { from { transform: translate3d(-14%, 0, 0) skewX(3deg); } to { transform: translate3d(12%, 3%, 0) skewX(-6deg); } }
+
+/* =====================================================================
+   Aurora flourish layer.
+
+   Scoped to html[data-theme="aurora"] so it touches nothing when another
+   theme is active, and kept in @layer theme-flourish (below the unlayered
+   base sheets): everything here is ADDITIVE - it sets properties the base
+   leaves unset, or re-points the tokens the base reads - so layer
+   precedence never bites and the base sheet's reduced-motion blanket still
+   wins. The few rules that must beat an unlayered base property are
+   unlayered below, each with its reason.
+   ===================================================================== */
+@layer theme-flourish {
+  /* ---- the one blurred pane: the sidebar, and the console rail ----
+     The sidebar hosts a frosted floater of its own (the theme picker), so
+     its blur rides a ::before - an element carrying backdrop-filter is a
+     backdrop root, and a floater inside it could sample only the sidebar's
+     own content. The rail hosts nothing positioned and blurs directly. */
+  html[data-theme="aurora"]:not([data-sky="off"]) [data-part="sidebar"]::before {
+    content: ""; position: absolute; inset: 0; z-index: -1;
+    backdrop-filter: var(--a-side-filter);
+    pointer-events: none;
+  }
+  html[data-theme="aurora"]:not([data-sky="off"]) [data-part="sidebar"],
+  html[data-theme="aurora"]:not([data-sky="off"]) [data-part="console-rail"] {
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, .05);
+  }
+  html[data-theme="aurora"]:not([data-sky="off"]) [data-part="console-rail"] {
+    backdrop-filter: var(--a-side-filter);
+  }
+
+  /* ---- the veil ----
+     Holds the sky back from the reading column and the composer: a radial
+     shade, 84% night at its centre and open at the edges, sized to the pane
+     so a narrower window still has open sky in the margins. The width is
+     set through background-size because a gradient's own radius does not
+     accept clamp() with a percentage. Painted on the main column's ::before
+     (the chat shell is the stacking context it sits in, under the content). */
+  html[data-theme="aurora"]:not([data-sky="off"]) .main-col::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background-repeat: no-repeat; background-position: 50% 46%;
+    background-size: clamp(84rem, 116%, 108rem) 200%;
+    transition: background-size 640ms cubic-bezier(.65, 0, .35, 1);
+    background-image: radial-gradient(ellipse 50% 50% at 50% 46%,
+      rgba(11, 13, 32, .84) 0, rgba(11, 13, 32, .84) 56%, rgba(11, 13, 32, .74) 64%, rgba(11, 13, 32, .52) 73%,
+      rgba(11, 13, 32, .27) 82%, rgba(11, 13, 32, .09) 91%, rgba(11, 13, 32, 0) 100%);
+    /* the window: everything, minus a feathered rectangle where the composer
+       sits. --pane-* are measured from the composer (hooks/use-veil-window). */
+    --feather: 26px;
+    mask-image: linear-gradient(#000 0 0),
+      linear-gradient(90deg, transparent, #000 var(--feather), #000 calc(100% - var(--feather)), transparent),
+      linear-gradient(180deg, transparent, #000 var(--feather), #000 calc(100% - var(--feather)), transparent);
+    mask-repeat: no-repeat;
+    mask-size: 100% 100%, var(--pane-w, 0px) var(--pane-h, 0px), var(--pane-w, 0px) var(--pane-h, 0px);
+    mask-position: 0 0, left var(--pane-x, 0px) bottom var(--pane-b, 0px), left var(--pane-x, 0px) bottom var(--pane-b, 0px);
+    mask-composite: exclude, intersect;
+  }
+  /* The window follows the box between a new chat and a thread, on the
+     box's own clock and curve (chat.css, "what travels between views"); at
+     rest it is placed at once, or it would trail a composer that grows. */
+  html[data-theme="aurora"][data-vt="composer"] .main-col {
+    transition: --pane-x 420ms cubic-bezier(0.2, 0.8, 0.2, 1), --pane-b 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      --pane-w 420ms cubic-bezier(0.2, 0.8, 0.2, 1), --pane-h 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  /* new chat: a smaller, softer veil, just enough behind the greeting and
+     the composer; the rest of the pane is open sky */
+  html[data-theme="aurora"]:not([data-sky="off"]) body[data-view="new"] .main-col::before {
+    background-size: clamp(46rem, 88%, 74rem) 96%;
+  }
+  /* boot: a pool of shade behind the words, as the new chat has one, so the
+     sky's brightest band never sits under text */
+  html[data-theme="aurora"]:not([data-sky="off"]) .boot::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(ellipse 50% 46% at 50% 48%, rgba(11, 13, 32, .86) 0, rgba(11, 13, 32, .76) 34%,
+      rgba(11, 13, 32, .48) 62%, rgba(11, 13, 32, .14) 84%, rgba(11, 13, 32, 0) 100%) 50% 0 / clamp(46rem, 92%, 80rem) 100% no-repeat;
+  }
+  /* the mark keeps a slow halo in the sky's colour */
+  html[data-theme="aurora"] .boot-mark::before {
+    content: ""; position: absolute; inset: -40px; z-index: -1; border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in srgb, var(--s-accent) 36%, transparent) 0,
+      color-mix(in srgb, var(--s-accent) 10%, transparent) 42%, transparent 70%);
+    animation: boot-halo 3600ms ease-in-out infinite;
+  }
+  @keyframes boot-halo {
+    0%, 100% { opacity: .5; transform: scale(.88); }
+    50% { opacity: 1; transform: scale(1.1); }
+  }
+  /* the progress fills glow: the sky's light on the one thing that moves */
+  html[data-theme="aurora"] .mm-bar i { box-shadow: 0 0 10px color-mix(in srgb, var(--s-accent) 70%, transparent); }
+  html[data-theme="aurora"] .mm-minibar i { box-shadow: 0 0 8px color-mix(in srgb, var(--s-accent) 70%, transparent); }
+  /* the sign-in's mark keeps the same halo, a size down with the mark */
+  html[data-theme="aurora"] .login-mark::before {
+    content: ""; position: absolute; inset: -30px; z-index: -1; border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in srgb, var(--s-accent) 30%, transparent) 0,
+      color-mix(in srgb, var(--s-accent) 8%, transparent) 42%, transparent 70%);
+    animation: boot-halo 3600ms ease-in-out infinite;
+  }
+  /* the console's work column has the thread's veil, cut to its own measure */
+  html[data-theme="aurora"]:not([data-sky="off"]) .console-main::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(ellipse 50% 50% at 50% 46%,
+      rgba(11, 13, 32, .84) 0, rgba(11, 13, 32, .84) 56%, rgba(11, 13, 32, .74) 64%, rgba(11, 13, 32, .52) 73%,
+      rgba(11, 13, 32, .27) 82%, rgba(11, 13, 32, .09) 91%, rgba(11, 13, 32, 0) 100%) 50% 46% / clamp(66rem, 104%, 92rem) 200% no-repeat;
+  }
+  /* sign-in: the sky has the window, with a quiet pool behind the card */
+  html[data-theme="aurora"]:not([data-sky="off"]) [data-part="login"]::before {
+    content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(ellipse 50% 44% at 50% 50%, rgba(11, 13, 32, .72) 0, rgba(11, 13, 32, .54) 38%,
+      rgba(11, 13, 32, .16) 74%, rgba(11, 13, 32, 0) 100%) 50% 0 / clamp(40rem, 84%, 68rem) 100% no-repeat;
+  }
+
+  /* ---- the horizon ----
+     The topbar's lower edge takes the colour of the running step. Two
+     parts: a hot core line, and a bloom that falls onto the thread and
+     lifts faintly into the bar. Both breathe together, slowly. It is the
+     sky's tell on narrow screens, and (held still) the static tell under
+     reduced motion. The bar is positioned and stacked in the base sheet. */
+  html[data-theme="aurora"] [data-part="topbar"]::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+    pointer-events: none; opacity: 0; transition: opacity 900ms var(--ease-standard);
+    background: linear-gradient(90deg, transparent 0, var(--sky-tint) 16%,
+      color-mix(in srgb, var(--sky-tint) 45%, #fff) 50%, var(--sky-tint) 84%, transparent 100%);
+    box-shadow: 0 0 4px color-mix(in srgb, var(--sky-tint) 88%, transparent),
+                0 0 16px color-mix(in srgb, var(--sky-tint) 52%, transparent),
+                0 2px 32px color-mix(in srgb, var(--sky-tint) 26%, transparent);
+  }
+  html[data-theme="aurora"] [data-part="topbar"]::before {
+    content: ""; position: absolute; left: 0; right: 0; top: calc(100% - 44px); height: 132px;
+    z-index: -1; pointer-events: none; opacity: 0; transition: opacity 900ms var(--ease-standard);
+    background:
+      radial-gradient(ellipse 32% 22% at 50% 44px, color-mix(in srgb, var(--sky-tint) 25%, transparent), transparent 100%),
+      radial-gradient(ellipse 60% 33% at 50% 44px, color-mix(in srgb, var(--sky-tint) 13%, transparent), transparent 100%);
+  }
+  html[data-theme="aurora"] body:is([data-state="waiting"], [data-state="loading"], [data-state="thinking"],
+    [data-state="tool"], [data-state="confirm"], [data-state="streaming"], [data-state="error"], [data-state="download"])
+    [data-part="topbar"]::after {
+    opacity: 1; animation: aurora-horizon-line 5.2s ease-in-out infinite;
+  }
+  html[data-theme="aurora"] body:is([data-state="waiting"], [data-state="loading"], [data-state="thinking"],
+    [data-state="tool"], [data-state="confirm"], [data-state="streaming"], [data-state="error"], [data-state="download"])
+    [data-part="topbar"]::before {
+    opacity: 1; animation: aurora-horizon-breathe 5.2s ease-in-out infinite;
+  }
+  @keyframes aurora-horizon-line { 50% { opacity: .74; } }
+  @keyframes aurora-horizon-breathe { 50% { opacity: .62; } }
+
+  /* ---- the composer: a pane straight onto the sky. No filter. ---- */
+  html[data-theme="aurora"] .composer-box {
+    /* A stacking context (z-index, NOT isolation - isolation is itself a
+       backdrop-root trigger). The VALUE matters: it flattens every drop-up
+       inside the composer (model menu, context card - their z-40 is local
+       now), so it must beat the floating chrome those panels open over -
+       jump-to-latest (5), the pane-loading cue (10) - while staying under
+       the mobile sidebar overlay (30) and the dialog scrim (50). */
+    position: relative;
+    z-index: 20;
+    box-shadow: var(--a-sky-edge);
+  }
+  /* ---- cards: lit panes. A light fill (their tokens above) and an edge
+     light; no filter, because nothing sharp is ever behind them. ---- */
+  html[data-theme="aurora"] [data-part="bubble-user"],
+  html[data-theme="aurora"] [data-part="confirm"],
+  html[data-theme="aurora"] [data-part="quote-chip"],
+  html[data-theme="aurora"] [data-part="message-editor"],
+  html[data-theme="aurora"] .cite-chip,
+  html[data-theme="aurora"] [data-part="code-block"],
+  html[data-theme="aurora"] .tool-detail,
+  html[data-theme="aurora"] .cn-box,
+  html[data-theme="aurora"] .composer-code,
+  html[data-theme="aurora"] .server-card,
+  html[data-theme="aurora"] .int-form,
+  html[data-theme="aurora"] .preset-btn,
+  html[data-theme="aurora"] .mm-row,
+  html[data-theme="aurora"] .mm-loaded,
+  html[data-theme="aurora"] .wd-section,
+  html[data-theme="aurora"] .mbr-row,
+  html[data-theme="aurora"] .kb-row {
+    box-shadow: var(--a-pane-edge);
+  }
+  /* the landed-on question's glow and the landed-on answer's wash
+     (chat.css) lie over the edge light */
+  html[data-theme="aurora"] [data-part="bubble-user"],
+  html[data-theme="aurora"] [data-part="content"] {
+    --lit-under: var(--a-pane-edge);
+  }
+  /* the activity panel is the composer's pane, a touch heavier: the one
+     thing on the console that changes while it is watched */
+  html[data-theme="aurora"] [data-part="mm-activity"] {
+    box-shadow: var(--a-sky-edge);
+  }
+  /* the sign-in card's fill and line come through its tokens above */
+  html[data-theme="aurora"] .login-card {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10), 0 24px 60px rgba(3, 4, 14, .42);
+  }
+
+  /* ---- floaters: the 14px blur, on the floater itself, never its host ----
+     The menus, the theme picker, the context card and the citation popover
+     take --c-menu-backdrop inline from the components. The dialog's blur
+     rides its ::before: backdrop-filter makes its element a containing
+     block for fixed-position descendants, and the dialog hosts a select
+     whose option list is exactly that - measured against the dialog's box,
+     the list decided it did not fit and flipped upward. Same recipe as the
+     scrim beside it: pseudo carries the blur, host gets a stacking context
+     from z-index, never isolation. */
+  html[data-theme="aurora"] [data-part="confirm-dialog"] {
+    position: relative;
+    z-index: 0;
+    box-shadow: var(--a-glass-edge), 0 24px 60px rgba(2, 4, 14, .55);
+  }
+  html[data-theme="aurora"] [data-part="confirm-dialog"]::before {
+    content: ""; position: absolute; inset: 0; z-index: -1;
+    border-radius: inherit;
+    backdrop-filter: var(--c-menu-backdrop);
+    pointer-events: none;
+  }
+  /* The dialog's option list (Chromium's customizable select) joins the same
+     chain, DIRECTLY: a pseudo-element cannot host another pseudo, and the
+     list contains plain option rows with nothing positioned to trap. */
+  html[data-theme="aurora"] .dialog-field select::picker(select) {
+    backdrop-filter: var(--c-menu-backdrop);
+    box-shadow: var(--a-glass-edge), 0 24px 60px rgba(2, 4, 14, .55);
+  }
+  html[data-theme="aurora"] [data-part="selection-quote"] {
+    backdrop-filter: var(--c-menu-backdrop);
+    box-shadow: var(--a-glass-edge), 0 10px 30px rgba(2, 4, 14, .45);
+  }
+
+  /* ---- luminous details ---- */
+  html[data-theme="aurora"] .caret {
+    box-shadow: 0 0 10px var(--s-accent), 0 0 3px var(--s-accent);
+  }
+  html[data-theme="aurora"] .cite-chip:hover {
+    box-shadow: var(--a-pane-edge), 0 0 14px color-mix(in srgb, var(--s-accent) 30%, transparent);
+  }
+}
+
+/* =====================================================================
+   Unlayered overrides. Each of these must beat a property the base sheet
+   sets unlayered - which a layered rule can never do, whatever its
+   specificity - so they win by being unlayered and more specific (the
+   data-theme prefix). globals.css imports this sheet BEFORE the base
+   sheets, so specificity is what carries them; keep the prefix on every
+   rule here.
+   ===================================================================== */
+
+/* The composer's focus ring restates the pane's edge, or the ring would
+   replace it for as long as the box has focus; and the frame is the accent
+   at 70%, not full strength - the editor focuses on load, so this is the
+   pane's resting look, and a saturated 1px line would be the brightest edge
+   on a page meant to read as open sky. */
+html[data-theme="aurora"] .composer-box:focus-within {
+  border-color: color-mix(in srgb, var(--s-accent) 70%, transparent);
+  box-shadow: var(--a-sky-edge), 0 0 0 3px color-mix(in srgb, var(--s-accent) 14%, transparent);
+}
+html[data-theme="aurora"] .composer-box[data-drag="true"] {
+  border-color: color-mix(in srgb, var(--s-accent) 70%, transparent);
+  box-shadow: var(--a-sky-edge), 0 0 0 3px color-mix(in srgb, var(--s-accent) 22%, transparent);
+}
+/* The active pane breathes: a soft halo past the ring, slowly to and fro on
+   the horizon's own cycle. The halo rides a pseudo of its own, so it can fade
+   in and out (320ms) while its cycle only pauses and resumes - on the box
+   itself it would cut off at blur, since no transition starts from a removed
+   animation. Behind the box's content (the box is a stacking context), with
+   nothing of its own inside the edge. */
+html[data-theme="aurora"] .composer-box::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 22px color-mix(in srgb, var(--s-accent) 16%, transparent);
+  opacity: 0;
+  transition: opacity 320ms var(--ease-standard);
+  animation: aurora-composer-breathe 5.2s ease-in-out infinite;
+  animation-play-state: paused;
+}
+html[data-theme="aurora"] .composer-box:focus-within::after {
+  opacity: 1;
+  animation-play-state: running;
+}
+@keyframes aurora-composer-breathe {
+  50% { box-shadow: 0 0 34px color-mix(in srgb, var(--s-accent) 30%, transparent); }
+}
+
+/* The timeline, unlayered because the base sheet cards the tool row, sets
+   the list marker and styles the citation mark unlayered - a layered rule
+   loses to those whatever its specificity. The tool row is no chip at all - the rail's glyph and
+   the loader narrate it - and the list marker is a star, a lit point in
+   the sky's colour with its glow, one of the constellation beside each
+   item. */
+html[data-theme="aurora"] [data-part="tool-trace"] .disc-btn {
+  min-height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+}
+/* the thinking body is flush with its row: no rule, no indent */
+html[data-theme="aurora"] [data-part="thinking"] .think-body {
+  border-left: 0;
+  padding-left: 0;
+}
+/* the answer's rhythm and the inline chip's size are the prototype's */
+html[data-theme="aurora"] [data-part="content"] ul,
+html[data-theme="aurora"] [data-part="content"] ol {
+  margin: 10px 0 0;
+}
+html[data-theme="aurora"] [data-part="content"] li + li {
+  margin-top: 8px;
+}
+html[data-theme="aurora"] [data-part="content"] code:not(pre code) {
+  font-size: 0.82em;
+}
+html[data-theme="aurora"] [data-part="content"] ul:not(.contains-task-list) {
+  list-style: none;
+  padding-left: 0;
+}
+html[data-theme="aurora"] [data-part="content"] ul:not(.contains-task-list) > li {
+  position: relative;
+  padding-left: 22px;
+}
+html[data-theme="aurora"] [data-part="content"] ul:not(.contains-task-list) > li::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: calc(0.82em - 2px);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--s-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--s-accent) 35%, transparent),
+              0 0 7px color-mix(in srgb, var(--s-accent) 75%, transparent);
+}
+html[data-theme="aurora"] [data-part="content"] ul ul:not(.contains-task-list) > li::before {
+  background: var(--s-text-3);
+  box-shadow: none;
+}
+/* The citation marker is a small lit chip, as the prototype draws it. */
+html[data-theme="aurora"] .cite-mark {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  min-width: 16px;
+  margin-left: 4px;
+  padding: 0 4px;
+  vertical-align: 2px;
+  background: color-mix(in srgb, var(--s-accent) 14%, transparent);
+  border-radius: 5px;
+}
+/* The base's fills under the pointer and while open, restated here: the
+   rest rule above outranks them by its theme prefix. */
+html[data-theme="aurora"] .cite-mark:hover {
+  background: color-mix(in srgb, var(--s-accent) 26%, transparent);
+}
+html[data-theme="aurora"] .cite-mark[data-highlighted="true"] {
+  background: color-mix(in srgb, var(--s-accent) 30%, transparent);
+}
+
+/* The activity panel's fill is the heavier pane (the base reads the card
+   token for it). */
+html[data-theme="aurora"] [data-part="mm-activity"] {
+  background: var(--c-activity-bg);
+  /* the comet below lies on the panel's own stack, under its text */
+  isolation: isolate;
+}
+/* A comet runs round the panel's border while something runs: a ring (the
+   border, masked out of a conic sweep in the sky's running colour) and the
+   same sweep blurred behind it as a glow. It fades in and out over 900ms;
+   the lap itself is steady, and under reduced motion the base sheet's
+   blanket holds it still as a lit arc. Unlayered: the reset zeroes a
+   pseudo's padding, and the ring is cut from that padding. */
+html[data-theme="aurora"] [data-part="mm-activity"]::before,
+html[data-theme="aurora"] [data-part="mm-activity"]::after {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit;
+  pointer-events: none; opacity: 0; transition: opacity 900ms var(--ease-standard);
+  background: conic-gradient(from var(--mm-ang), transparent 0 58%, color-mix(in srgb, var(--sky-tint) 30%, transparent) 76%,
+    var(--sky-tint) 93%, color-mix(in srgb, var(--sky-tint) 40%, #fff) 100%);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+html[data-theme="aurora"] [data-part="mm-activity"]::before { padding: 1.5px; }
+html[data-theme="aurora"] [data-part="mm-activity"]::after { inset: -7px; padding: 8px; z-index: -1; filter: blur(7px); }
+html[data-theme="aurora"] [data-part="mm-activity"][data-running]::before,
+html[data-theme="aurora"] [data-part="mm-activity"][data-running]::after {
+  opacity: 1; animation: mm-lap 4.8s linear infinite;
+}
+@keyframes mm-lap { to { --mm-ang: 360deg; } }
+
+/* Jump-to-latest: a floater over the composer, so it carries the floaters'
+   blur and fill, an accent rim and a real drop shadow. Only the surface is
+   restated; the 40px size, the show/hide transform and reduced motion all
+   stay the base's. */
+/* Neutral at rest: in the accent it read as a call to action before anything
+   had arrived; the dot says when something has. */
+html[data-theme="aurora"] [data-part="jump-to-latest"] {
+  background: var(--c-float-bg);
+  border-color: var(--s-border-strong);
+  color: var(--s-text-2);
+  backdrop-filter: var(--c-menu-backdrop);
+  box-shadow:
+    var(--a-glass-edge),
+    0 10px 26px rgba(2, 4, 14, .7);
+}
+html[data-theme="aurora"] [data-part="jump-to-latest"]:hover {
+  color: var(--s-accent-hover);
+  border-color: var(--s-accent);
+  /* The elevation shadow stays neutral and offset (depth); the accent halo is
+     centred - an offset accent glow pools below the disc and reads as an
+     off-centre hover. */
+  box-shadow:
+    var(--a-glass-edge),
+    0 10px 26px rgba(2, 4, 14, .7),
+    0 0 20px color-mix(in srgb, var(--s-accent) 40%, transparent);
+}
+
+/* The composer drop-ups and the citation popover run the shared floater
+   recipe from the base sheet; only the deeper elevation shadow is theirs. */
+html[data-theme="aurora"] .model-menu,
+html[data-theme="aurora"] .context-pop,
+html[data-theme="aurora"] [data-part="convo-menu"],
+html[data-theme="aurora"] .citation-popover {
+  box-shadow: var(--a-glass-edge), 0 16px 40px rgba(2, 4, 14, .6);
+}
+/* The context ring's arc takes a little of the sky's glow: aurora's, not
+   every theme's. */
+html[data-theme="aurora"] .ring-fill {
+  filter: drop-shadow(0 0 3px color-mix(in srgb, currentColor 55%, transparent));
+}
+
+/* On narrow screens the sidebar is a drawer over the thread and the rail a
+   tab strip above the page, not panes beside them: solid night, no shade
+   and no blur (the dossier's "solid drawer over a scrim under 760px"). */
+@media (max-width: 767px) {
+  html[data-theme="aurora"] {
+    --c-sidebar-bg: var(--p-night-1);
+    /* the serif steps down half a point on a phone's measure */
+    --text-prose: 16px;
+  }
+  html[data-theme="aurora"] [data-part="sidebar"]::before,
+  html[data-theme="aurora"] [data-part="console-rail"] {
+    backdrop-filter: none;
+  }
+}
+
+/* Generated-title reveal. Two REAL spans from the component (chat.css hides
+   .reveal-glint by default; this theme paints it): .reveal-ink types the
+   fragment as plain text - the same ink and subpixel rasterization it keeps
+   forever - and .reveal-glint duplicates it on top, filled by the sweep
+   gradient clipped into its own glyphs. The band must be the glyphs' OWN
+   fill with nothing lit beneath: at sidebar sizes most glyph pixels are
+   antialiased edges, and edge pixels blend the band against whatever is
+   under them - the dark app background keeps the trail deep, a bright base
+   glyph washes it to a ghost - so the ink span holds its fill invisible
+   while the glint paints (resting stops from currentColor, so every surface
+   inherits its own row ink). Both layers animate on ELEMENTS, never
+   pseudo-elements: an animated ::before whose content is rewritten every
+   typewriter tick ties the animation to the pseudo box's lifecycle, while
+   element animations demonstrably survive text churn (the sweep tracked the
+   type-out end to end when measured live). The hand-back is a CROSS-FADE
+   scheduled entirely in CSS - both settle animations are delayed
+   by --reveal-dur (the type-out length, from the component), so as the last
+   character lands the glint fades out while the ink fades in, and the
+   grayscale-to-subpixel rasterization change that a hard swap would pop as
+   a subtle "weight" flick dissolves inside the fade. The sweep itself is
+   linear, matching the typewriter's constant cadence, with a wide trailing
+   ramp (52% -> 72%) so characters settle to ink gently behind the band.
+   Reduced motion: the base sheet's animation blanket removes all three
+   animations, the ink is simply visible, and the reduced-motion block
+   below drops the glint outright (stilled, it would double-print off the
+   ink); the component skips the type-out anyway. Unlayered: chat.css's
+   default .reveal-glint { display: none } is unlayered, and a layered rule
+   could never re-display it. */
+html[data-theme="aurora"] .title-reveal {
+  position: relative;
+}
+html[data-theme="aurora"] .reveal-ink {
+  animation: aurora-title-ink-in 200ms var(--ease-standard) var(--reveal-dur, 1200ms) 1 backwards;
+}
+html[data-theme="aurora"] .reveal-glint {
+  /* chat.css hides the glint; block is what position:absolute computes
+     for it anyway, so say so. */
+  display: block;
+  position: absolute;
+  /* NOT inset: 0. The wrapper is a relatively positioned INLINE, so its
+     containing block is its padding box - the font content area (about
+     17px here), shorter than the inherited 1.75 line box (22.75px).
+     Stretched to that box, the glint's half-leading pushed its text about
+     2px below the ink baseline, and background-clip: text paints nothing
+     below the box - descenders rendered sheared while the ink was held
+     invisible. Centering the glint's natural line box on the containing
+     block keeps the baselines within a subpixel and the descenders
+     painted. (inline-block on the wrapper is no fix: an atomic inline is
+     elided wholesale by the row's text-overflow, so a long title would
+     render as a bare "...".) */
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    currentColor 0%, currentColor 30%,
+    var(--p-aurora-teal) 44%, var(--p-aurora-magenta) 52%,
+    currentColor 72%, currentColor 100%);
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation:
+    aurora-title-reveal var(--reveal-dur, 1200ms) linear 1,
+    aurora-title-glint-out 200ms var(--ease-standard) var(--reveal-dur, 1200ms) 1 forwards;
+}
+@keyframes aurora-title-reveal {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
+}
+@keyframes aurora-title-ink-in {
+  from { -webkit-text-fill-color: transparent; }
+  to { -webkit-text-fill-color: currentColor; }
+}
+@keyframes aurora-title-glint-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Reduced motion: the base-sheet blanket already stills every animation
+   and transition (the curtains hold, the horizon holds lit, the shader
+   draws one frame - components/sky.tsx reads the same query). This drops
+   the reveal's glint outright - with its animations blanketed away it would
+   rest painted over the visible ink as double-printed text. Unlayered so it
+   wins over the layered flourish. */
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="aurora"] .reveal-glint { display: none; }
+  /* the halo stands still at its resting value */
+  html[data-theme="aurora"] .composer-box::after { animation: none; }
+}
+
+/* Forced colors (Windows High Contrast) drops background images, which turns
+   clipped-gradient text invisible. The brand goes plain ink; the reveal's
+   glint span goes back to hidden, and the ink span's delayed fade-in is
+   removed so its fill is plainly visible from the first typed character -
+   without that, the type-out would render an invisible title. */
+@media (forced-colors: active) {
+  html[data-theme="aurora"] .reveal-ink {
+    animation: none;
+  }
+  html[data-theme="aurora"] .reveal-glint {
+    display: none;
+  }
+}
+
+/* Reduced transparency: the sidebar and the rail go solid, the sky goes
+   off (the app picks data-sky="off", and the veils key on it), every
+   blurred floater goes solid, and every lit pane keeps its fill - a light
+   fill over the flat night reads exactly as it does over the veil. */
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme="aurora"] {
+    --c-sidebar-bg: var(--s-bg-panel);
+    --c-topbar-bg: var(--s-bg-panel);
+    --c-float-bg: #141730;
+    --c-dialog-bg: #141730;
+    --c-menu-backdrop: none;
+    --c-composer-bg: #14173a;
+    --c-activity-bg: #14173a;
+    --c-login-bg: #14173a;
+  }
+  html[data-theme="aurora"] [data-part="sidebar"]::before,
+  html[data-theme="aurora"] [data-part="console-rail"],
+  html[data-theme="aurora"] [data-part="confirm-dialog"]::before,
+  html[data-theme="aurora"] [data-part="jump-to-latest"],
+  html[data-theme="aurora"] [data-part="selection-quote"] {
+    backdrop-filter: none !important;
+  }
+}

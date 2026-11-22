@@ -1,0 +1,774 @@
+# Base topology for the AI Chatbot Platform.
+#
+#   Run:   make up          (GPU, default)   |   make up PROFILE=cpu   (no NVIDIA GPU)
+#   Raw:   docker compose --env-file .env -f infra/docker-compose.yml \
+#            -f infra/docker-compose.override.yml --profile gpu up -d
+#
+# The second `-f` is what DEPLOY_ENV in .env selects: the development override
+# above, or infra/docker-compose.prod.yml for a deployment.
+#
+# Every service here is real: the backing services (postgres/redis/qdrant/
+# ollama), the backend + frontend, the worker, and the sidecars (mcp-chassis,
+# reranker, searxng). No stubs remain - mcp-chassis was the last one, and it
+# builds for real as of Phase 5. See docs/ROADMAP.md.
+
+name: ai-chatbot-platform
+
+# Every service caps its own logs. Docker's default json-file driver has NO
+# size limit, so a container's log grows until the disk is full - and neither
+# `docker system prune` nor `make prune` ever reclaims it. The only thing that
+# frees a container log is recreating the container, which a development box
+# does constantly and a long-running server almost never, so the risk sits
+# entirely on the deployment side.
+#
+# 10 MB across 3 files is ~30 MB per container and ~360 MB for the whole stack:
+# enough history to investigate a bad night, small enough to stop thinking
+# about. Applied when a container is CREATED, so it takes effect on the next
+# `make up` and does not retroactively shrink anything already written.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # ── Backing services ────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    # Every service restarts itself after a crash. Without this a crash is
+    # PERMANENT until somebody notices: the worker was killed by the kernel once
+    # and simply stayed dead, and since uploads are only ever moved along by the
+    # worker, every file attached afterwards sat on a spinner forever.
+    #
+    # `on-failure` and not `always`/`unless-stopped` on purpose: those two also
+    # bring the whole stack UP whenever the Docker daemon starts, so merely
+    # launching Docker Desktop would boot postgres, qdrant and a GPU-resident
+    # Ollama with nobody asking for them. Recovering from a crash is what is
+    # wanted here; `make up` stays the only thing that starts the stack. The prod
+    # overlay raises this to `always`, where always-on IS the point.
+    restart: on-failure
+    logging: *default-logging
+    # After an UNCLEAN shutdown, sync the filesystem in one syscall (syncfs)
+    # instead of fsyncing every file in the data dir - the per-file walk took
+    # 60+ seconds on a WSL2 virtual disk even with an empty database.
+    command: ["postgres", "-c", "recovery_init_sync_method=syncfs"]
+    # Postgres runs a final checkpoint on shutdown; on a slow disk it can
+    # outlive compose's default 10s stop grace, and the SIGKILL that follows
+    # leaves the data dir marked "crashed" - so the NEXT boot pays for crash
+    # recovery even though `down` looked clean. Give the checkpoint time to
+    # finish; a fast exit still ends the wait immediately.
+    stop_grace_period: 120s
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-chatbot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chatbot}
+      POSTGRES_DB: ${POSTGRES_DB:-chatbot}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chatbot}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Grace window for crash recovery: after an unclean shutdown (laptop
+      # closed, Docker Desktop killed) postgres fsyncs the data dir and replays
+      # WAL, which can take minutes on a busy disk. Failing probes inside this
+      # window don't count, and a passing probe still ends it immediately, so
+      # clean boots stay just as fast.
+      start_period: 300s
+    # Published to the LOOPBACK address by default, like every backing service
+    # and the backend itself. Only the frontend is reachable from off-box.
+    #
+    # This matters on a Linux host and cannot be fixed there by a firewall:
+    # publishing a port inserts a rule into Docker's own iptables chain, which
+    # is evaluated BEFORE the chain a host firewall manages, so `ufw deny 5432`
+    # does not close a published 5432. A development machine gives no warning
+    # either, because Docker Desktop proxies published ports and the operating
+    # system's firewall gates them there.
+    #
+    # Set BIND_HOST=0.0.0.0 to publish on every interface (for reaching the
+    # stack from another machine on a trusted network, say). Container-to-
+    # container traffic does not use these at all - it goes over the compose
+    # network by service name - so narrowing them costs the stack nothing.
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
+
+  redis:
+    image: redis:7-alpine
+    restart: on-failure
+    logging: *default-logging
+    command: ["redis-server", "--save", "60", "1"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
+
+  qdrant:
+    image: qdrant/qdrant:v1.18.2
+    restart: on-failure
+    logging: *default-logging
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      # Qdrant answers /readyz once its collections are loaded, which is the
+      # state a dependent service actually needs - "listening" is not the same
+      # thing on a store that replays a write-ahead log at boot.
+      #
+      # Spoken over bash's /dev/tcp because the image ships NEITHER curl NOR
+      # wget (verified inside the pinned image; it has bash, and that is all).
+      # bash is required rather than incidental: /dev/tcp is a bash feature and
+      # the image's /bin/sh is dash, which has no such thing. Only the status
+      # line is read, so a 200 in a response BODY cannot pass a failing probe.
+      test:
+        [
+          "CMD",
+          "bash",
+          "-c",
+          'exec 3<>/dev/tcp/localhost/6333 && printf "GET /readyz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 && head -n 1 <&3 | grep -q "200 OK"',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${BIND_HOST:-127.0.0.1}:${QDRANT_GRPC_PORT:-6334}:6334"
+
+  # Ollama: two mutually-exclusive variants chosen by profile. Both share the
+  # model volume and answer on the network alias `ollama`, so app services always
+  # reach it at http://ollama:11434 regardless of profile.
+  #
+  # Pinned to 0.32.5: the version the remote Ollama deployment serves, so local
+  # and remote turns run the same runtime (capability probes record
+  # runtime_version, and a split pin would read as stale verdicts on one side).
+  # Bumps are measured for turn-latency regression before landing (0.32.0 ->
+  # 0.32.5, 4GB card, warm: no regression).
+  #
+  # The runtime settings below are shared by both variants and live in the BASE
+  # file rather than the dev override, because they are not development
+  # conveniences - they are the runtime's operating limits, and a deployment
+  # needs them at least as much as a laptop does. They sat in the override until
+  # Phase 8, which meant a production layering (base + prod overlay, no
+  # override) handed Ollama no environment at all and silently reverted it to
+  # the built-in 5-minute load ceiling - the exact abort-mid-load failure the
+  # 15m value exists to prevent:
+  #
+  #   OLLAMA_MAX_LOADED_MODELS  how many models stay loaded at once. 2 = the GPU
+  #     chat model plus the embedder (EMBEDDING_DEVICE pins it to the CPU by
+  #     default, so it takes a runner slot but no VRAM). It was 1 before RAG
+  #     landed, and at 1 the first retrieval of every session evicted the warmed
+  #     chat model.
+  #   OLLAMA_KEEP_ALIVE  how long a warmed model stays resident. -1 keeps it
+  #     until `make cool` or a stack stop, which is the right default when the
+  #     GPU exists to serve models; set a bounded value (e.g. 15m) on a
+  #     testing/shared box that also needs the card for other work.
+  #   OLLAMA_LOAD_TIMEOUT  the server's own give-up ceiling on a model load (its
+  #     built-in default is 5m). On a contended host a HEALTHY load can run past
+  #     six minutes (measured live 2026-07-29) and the default kills it mid-load.
+  #     It moves together with the backend's OLLAMA_READ_TIMEOUT_SECONDS, which
+  #     must stay the LONGER of the two: a backend that hangs up first makes
+  #     Ollama abort a load the server would have finished.
+  ollama-cpu:
+    image: ollama/ollama:0.32.5
+    profiles: ["cpu"]
+    restart: on-failure
+    logging: *default-logging
+    networks:
+      default:
+        aliases: [ollama]
+    environment:
+      - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-2}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:--1}
+      - OLLAMA_LOAD_TIMEOUT=${OLLAMA_LOAD_TIMEOUT:-15m}
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${OLLAMA_PORT:-11434}:11434"
+
+  ollama-gpu:
+    image: ollama/ollama:0.32.5
+    profiles: ["gpu"]
+    restart: on-failure
+    logging: *default-logging
+    networks:
+      default:
+        aliases: [ollama]
+    environment:
+      - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-2}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:--1}
+      - OLLAMA_LOAD_TIMEOUT=${OLLAMA_LOAD_TIMEOUT:-15m}
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${OLLAMA_PORT:-11434}:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ── Application tier ─────────────────────────────────────────────────────
+  backend: # real FastAPI build (ROADMAP Phase 1). Dev overlay adds hot-reload.
+    restart: on-failure
+    logging: *default-logging
+    # A chat turn legitimately runs for minutes (a cold model load alone can),
+    # so the default 10s grace SIGKILLs live streams mid-write on every stop.
+    stop_grace_period: 120s
+    build:
+      context: ../apps/backend
+      target: prod
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      # service_healthy, not service_started: Qdrant accepts connections before
+      # it has finished loading collections, and the backend's first retrieval
+      # would fail against a store that is up but not ready.
+      qdrant: { condition: service_healthy }
+    environment:
+      # DATABASE_URL is derived from the POSTGRES_* vars so the password lives in
+      # exactly one place (.env); set DATABASE_URL explicitly to override.
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-chatbot}:${POSTGRES_PASSWORD:-change-me-in-real-env}@postgres:5432/${POSTGRES_DB:-chatbot}}
+      - APP_NAME
+      - DATABASE_ECHO
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      # Ceiling on a cold model load. Keep it LONGER than the ollama service's
+      # OLLAMA_LOAD_TIMEOUT: a backend that hangs up first makes Ollama abort
+      # a load the server would have finished.
+      - OLLAMA_READ_TIMEOUT_SECONDS
+      # Extra HTTP headers for a proxied remote model server; a key absent from
+      # this list never reaches the container.
+      - OLLAMA_AUTH_HEADERS
+      # Where a model name is checked before it is downloaded; only a registry
+      # mirror or proxy needs a different value.
+      - OLLAMA_REGISTRY_URL=${OLLAMA_REGISTRY_URL:-https://registry.ollama.ai}
+      - MODEL_PROVIDER=${MODEL_PROVIDER:-ollama}
+      # Empty fallbacks on purpose: unset means "nothing is configured here",
+      # which lets the stored rungs of the resolution chain (a conversation's
+      # pin, then the workspace default) answer. Baking a tag in would pin the
+      # model against every choice made on the console.
+      - DEFAULT_CHAT_MODEL=${DEFAULT_CHAT_MODEL:-}
+      - THINKING_CHAT_MODEL=${THINKING_CHAT_MODEL:-}
+      - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-http://localhost:3000}
+      # Bare pass-through (no `=` default): unset in .env stays UNSET in the
+      # container (backend composes its default prompt), an explicitly empty
+      # value disables the prompt, and any other value fully overrides it.
+      - SYSTEM_PROMPT
+      # Tuning knobs with backend-side defaults: bare pass-throughs so unset
+      # stays unset (the backend default applies) - see infra/.env.example.
+      # DEFAULT_CONTEXT_WINDOW must reach the worker too: the title job sizes
+      # its generation the same way a turn does, and two different windows for
+      # one tag make the model server reload between them.
+      - DEFAULT_CONTEXT_WINDOW
+      # Where embedding work runs. Must reach the worker too: it embeds every
+      # uploaded file, and a worker placing that work on the card while the
+      # backend keeps queries off it would evict the chat model on every
+      # ingest - the exact cost the pin exists to avoid.
+      - EMBEDDING_DEVICE
+      - LOG_LEVEL
+      - HISTORY_TOKEN_BUDGET
+      - HISTORY_MAX_MESSAGES
+      - SSE_HEARTBEAT_SECONDS
+      - MAX_STREAMS_PER_TENANT
+      # Whether a reranker exists, and which model the sidecar loaded. The
+      # second is not derivable: a rerank request carries a model name, and
+      # only the sidecar's own --model-id says which weights answer to it.
+      - RERANKER_URL
+      - RERANKER_MODEL
+      - RAG_ENABLED
+      - RAG_TOP_K
+      - RAG_FETCH_K
+      - RAG_MIN_SCORE
+      - RAG_REL_MARGIN
+      - RAG_TOKEN_BUDGET
+      - RAG_CHUNK_TOKENS
+      - RAG_CHUNK_OVERLAP_TOKENS
+      - RAG_EMBED_BATCH
+      - RAG_SESSION_TTL_MINUTES
+      - RAG_INGEST_PAUSE_SECONDS
+      - SEARXNG_URL
+      - WEB_SEARCH_ENABLED
+      - WEB_SEARCH_TOP_K
+      - WEB_SEARCH_TIMEOUT_SECONDS
+      - WEB_FETCH_PAGES
+      - WEB_FETCH_TIMEOUT_SECONDS
+      - WEB_FETCH_MAX_BYTES
+      - WEB_FETCH_MAX_CHARS
+      - WEB_FETCH_CONCURRENCY
+      # How many results get a full-page fetch, and how long an already-ingested
+      # page is reused. Both are read by the web-search service on the request
+      # path; both landed with the grounding work and were never listed here, so
+      # setting either in .env did nothing at all until now.
+      - WEB_FETCH_MAX_PAGES
+      - WEB_RESULT_CACHE_MINUTES
+      # Which object store holds uploaded bytes, and where. STORAGE_BACKEND
+      # selects the adapter; the S3 keys are read only when it is `s3`.
+      # Compose passes only what is listed here (there is no env_file), so an
+      # omitted key is silently inert - STORAGE_BACKEND was exactly that until
+      # the S3 adapter made it mean something.
+      - STORAGE_BACKEND
+      - STORAGE_LOCAL_DIR
+      - S3_ENDPOINT_URL
+      - S3_BUCKET
+      - S3_ACCESS_KEY_ID
+      - S3_SECRET_ACCESS_KEY
+      - S3_REGION
+      - ATTACHMENT_MAX_BYTES
+      # Read on the chat request path (waiting for a named file to finish
+      # parsing, and its retrieval budget), so they belong on the backend even
+      # though the worker parses the file. Compose passes only what is listed
+      # here (there is no env_file), so an omitted key is silently inert.
+      - ATTACHMENT_WAIT_SECONDS
+      - ATTACHMENT_POLL_SECONDS
+      - RAG_ATTACHMENT_TOP_K
+      - RAG_ATTACHMENT_TOKEN_BUDGET
+      - VISION_MAX_IMAGES
+      - VISION_IMAGE_BUDGET_CELLS
+      - VISION_MAX_SOURCE_BYTES
+      # Phase 5 tool calling. All read on the chat request path: how much the
+      # model may drive the turn, the tool loop's bounds and result budgets, the
+      # MCP sidecar the loop dials, and the master key the SecretStore needs
+      # before it will store a credential. Bare pass-throughs like the block
+      # above, so an unset key keeps the backend's own default - but they must
+      # be LISTED regardless, per the note above: an omitted key never reaches
+      # the container at all, which would leave AGENCY_MODE=deterministic (the
+      # kill switch) and every budget below silently doing nothing.
+      - AGENCY_MODE
+      - AGENCY_REQUIRE_VERIFICATION
+      - TOOL_MAX_ITERATIONS
+      - TOOL_MAX_CALLS_PER_TURN
+      - TOOL_TIMEOUT_SECONDS
+      - TOOL_RESULT_MAX_TOKENS
+      - TOOL_RESULT_TOTAL_MAX_TOKENS
+      - TOOL_RESULT_MIN_TOKENS
+      - TOOL_CONFIRMATION_TTL_SECONDS
+      - TOOL_SELECTION_THRESHOLD
+      - TOOL_SELECTION_TOP_K
+      # Files a tool hands back, stored as attachments on the chat path. Backend
+      # only: the worker never runs a tool loop, so listing them there would
+      # advertise a knob that service does not read.
+      - TOOL_ARTIFACT_MAX_BYTES
+      - TOOL_ARTIFACT_MAX_PER_TURN
+      - MCP_CHASSIS_URL
+      # The backend is the side that SENDS the bearer token; the chassis stanza
+      # below takes the same value and is the side that demands it. Passing it
+      # to only one of the two makes every MCP call 401.
+      - MCP_CHASSIS_API_KEY
+      # Per-user credential injection (Phase 5 slice 6b): off by default, so the
+      # shared MCP_CHASSIS_API_KEY behaviour is unchanged until a deployment opts in.
+      - MCP_PER_USER_CREDENTIALS
+      - MCP_CHASSIS_CREDENTIAL_NAME
+      # The document-generation sidecar, registered exactly like the chassis: a
+      # URL to seed the row, the bearer the backend SENDS (the doc-gen stanza
+      # below takes the same value and is the side that demands it), and the
+      # name that row - and so its stored credential - is filed under.
+      - DOCGEN_MCP_URL
+      - DOCGEN_API_KEY
+      - DOCGEN_CREDENTIAL_NAME
+      - MCP_TIMEOUT_SECONDS
+      - MCP_LIST_TIMEOUT_SECONDS
+      - MCP_LIST_CACHE_SECONDS
+      - MCP_LIST_CACHE_ERROR_SECONDS
+      # OAuth consent flow (Phase 5 slice 9): the origin the browser returns
+      # to, and how long a started consent stays completable.
+      - OAUTH_REDIRECT_BASE_URL
+      - OAUTH_AUTHORIZATION_TTL_SECONDS
+      - SECRET_MASTER_KEY
+      # Login (Phase 8b). OIDC_ISSUER is the master switch, so an omitted key
+      # here is the loudest possible version of this whole bug class: a
+      # deployment that configured login in .env would boot with none, and every
+      # caller would silently be the seeded default user again. The three
+      # admission lists are listed for the same reason - a deployment that
+      # forwarded the issuer but not the lists would refuse everybody it meant
+      # to admit. The worker takes none of them: it resolves no principal.
+      - OIDC_ISSUER
+      - OIDC_CLIENT_ID
+      - OIDC_CLIENT_SECRET
+      - OIDC_ADMIN_EMAILS
+      - OIDC_ALLOWED_DOMAINS
+      - OIDC_ALLOWED_EMAILS
+      - SESSION_TTL_SECONDS
+      # Phase 8 request-rate limiting. Read on every request, so an omitted key
+      # here would leave the limits at their code defaults with a tuned .env
+      # doing nothing - and TRUSTED_PROXY_IPS silently empty is the difference
+      # between a proxied deployment limiting real clients and limiting the
+      # proxy as one client.
+      - RATE_LIMIT_ENABLED
+      - RATE_LIMIT_PER_MINUTE
+      - RATE_LIMIT_HEAVY_PER_MINUTE
+      - RATE_LIMIT_LIGHT_PER_MINUTE
+      - TRUSTED_PROXY_IPS
+      # Which SearchProvider the backend builds, the counterpart to
+      # MODEL_PROVIDER above. Unlisted, "none" in .env would not disable web
+      # search - the very thing it is set to do.
+      - SEARCH_PROVIDER=${SEARCH_PROVIDER:-searxng}
+    volumes:
+      # Uploaded attachment bytes. A named volume, so they survive the
+      # container recreate that `make rebuild` performs. Shared with the
+      # worker, which parses the files the API stored.
+      - attachment_data:/data/storage
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    ports:
+      # Loopback too: the browser never talks to this port. Every call from the
+      # UI goes to the Next server, which relays to the backend over the compose
+      # network. What still needs it published is host-side tooling - `make
+      # status`, the warm targets, and anything curling the API by hand.
+      - "${BIND_HOST:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
+
+  worker: # arq background jobs (vector TTL sweep; attachment parse + ingest; attachment GC)
+    # The one that hurts most when it is missing: see the note on postgres.
+    restart: on-failure
+    logging: *default-logging
+    # A parse-and-ingest job runs for minutes on a large scanned PDF (OCR alone
+    # is seconds per page), and the default 10s grace kills it partway through
+    # writing its chunks - leaving the attachment stuck mid-processing.
+    stop_grace_period: 120s
+    build:
+      # Same context/target as the backend: BuildKit dedupes the layers, and
+      # an own build stanza avoids depending on the backend image's tag name.
+      context: ../apps/backend
+      target: prod
+    # The prod image's default CMD is migrate-then-serve; the worker must
+    # override it or it would boot a second API server and race migrations.
+    command: ["arq", "app.workers.main.WorkerSettings"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      # Same reasoning as the backend's: the ingest job writes vectors, so a
+      # store that is listening but still loading is not good enough.
+      qdrant: { condition: service_healthy }
+    # The attachment job runs the SAME ingestion pipeline the API does, so it
+    # needs the same dependencies: the database (attachment rows and the
+    # workspace's embedder choice), Ollama, and the chunking knobs. Keep this
+    # list in step with the backend's - a var the backend reads during ingest
+    # that the worker lacks means files parse differently depending on who
+    # parsed them.
+    #
+    # "In step" means the INGEST knobs, not every key the backend holds. The
+    # Phase 5 tool block is deliberately absent: the worker parses uploads and
+    # sweeps expired vectors, and its jobs import nothing from the tool loop,
+    # the MCP client or the SecretStore. Listing keys it cannot read would imply
+    # a dependency that does not exist, and a stale copy of them here would be
+    # the more confusing bug.
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-chatbot}:${POSTGRES_PASSWORD:-change-me-in-real-env}@postgres:5432/${POSTGRES_DB:-chatbot}}
+      # The worker builds the same SQLAlchemy engine the backend does, so the
+      # echo flag has to reach both or it only half works.
+      - DATABASE_ECHO
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      # The worker embeds during ingest, so a cold embedder load on a busy box
+      # needs the same ceiling the backend gets.
+      - OLLAMA_READ_TIMEOUT_SECONDS
+      # Extra HTTP headers for a proxied remote model server; a key absent from
+      # this list never reaches the container.
+      - OLLAMA_AUTH_HEADERS
+      - MODEL_PROVIDER=${MODEL_PROVIDER:-ollama}
+      # The title job runs a real chat turn, so it needs the same chat pair the
+      # backend resolves - or it would title conversations with a model nobody
+      # chose.
+      - DEFAULT_CHAT_MODEL=${DEFAULT_CHAT_MODEL:-}
+      - THINKING_CHAT_MODEL=${THINKING_CHAT_MODEL:-}
+      # The title job's window; see the backend service for why both need it.
+      - DEFAULT_CONTEXT_WINDOW
+      # Where ingest embedding runs; see the backend service for why both need it.
+      - EMBEDDING_DEVICE
+      - LOG_LEVEL
+      - RAG_SWEEP_INTERVAL_MINUTES
+      - RAG_CHUNK_TOKENS
+      - RAG_CHUNK_OVERLAP_TOKENS
+      - RAG_EMBED_BATCH
+      - RAG_SESSION_TTL_MINUTES
+      - RAG_INGEST_PAUSE_SECONDS
+      # The worker reads and deletes the same objects the API writes (parse and
+      # ingest, the tombstone purge, the orphan-blob sweep), so it needs the
+      # identical storage configuration - a worker still on local-fs while the
+      # API is on S3 would sweep an empty store and reap nothing.
+      - STORAGE_BACKEND
+      - STORAGE_LOCAL_DIR
+      - S3_ENDPOINT_URL
+      - S3_BUCKET
+      - S3_ACCESS_KEY_ID
+      - S3_SECRET_ACCESS_KEY
+      - S3_REGION
+      - ATTACHMENT_GC_INTERVAL_MINUTES
+      - ATTACHMENT_ORPHAN_GRACE_MINUTES
+      - ATTACHMENT_STALL_MINUTES
+      # The two retention windows. Worker only: the sweep that reads them rides
+      # the GC cron above, and no request path consults either. Listed even
+      # though both are bare pass-throughs, per the note on the backend's
+      # storage block - a key absent from this list never reaches the container,
+      # so GENERATED_FILE_RETENTION_DAYS=0 in .env would silently keep expiring
+      # files on the code default of 30.
+      - GENERATED_FILE_RETENTION_DAYS
+      - ATTACHMENT_RETENTION_DAYS
+      # OCR runs in the worker (where files are parsed), so its knobs live here.
+      - OCR_ENABLED
+      - OCR_LANGUAGE
+      - OCR_DPI
+      - OCR_MIN_CHARS
+      - OCR_MAX_PAGES
+      - OCR_TIMEOUT_SECONDS
+    volumes:
+      # The same attachment bytes the API wrote: the parse-and-ingest job reads
+      # them here. Mounted read-write because cleanup jobs also delete blobs.
+      - attachment_data:/data/storage
+    healthcheck:
+      # arq refreshes a Redis health key (health_check_interval=60 in
+      # WorkerSettings); --check fails when the key is stale, catching a
+      # wedged (not just crashed) worker.
+      test: ["CMD", "arq", "--check", "app.workers.main.WorkerSettings"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # The MCP chassis: ONE container mounting several MCP wrapper servers, each at
+  # its own path (the bundled example wrapper at /example, so /example/mcp). A
+  # wrapper exists because upstream APIs do not speak MCP - it translates. This
+  # is the sidecar the tool loop reaches as an MCP source; deployment-specific
+  # wrappers are added to the chassis on their own branches, and each path stays
+  # its own registration (own credential, own tool toggles).
+  #
+  # NOT profile-gated (unlike the opt-in reranker): MCP tools belong to the
+  # standard `make up` set.
+  mcp-chassis:
+    restart: on-failure
+    logging: *default-logging
+    build:
+      context: ../services/mcp-chassis
+    environment:
+      # The chassis reads exactly these three (services/mcp-chassis/README.md),
+      # and all three are bare pass-throughs (no `=` default): unset in .env
+      # stays UNSET here, so the chassis applies its OWN default. Repeating
+      # those defaults here would duplicate them, and compose's copy would WIN,
+      # silently pinning a stale list the day the chassis changes.
+      #
+      # The Host allow list is the MCP SDK's DNS-rebinding defense: a request
+      # whose Host is not listed is rejected with 421. The chassis default
+      # already covers this service's compose name, which is how the backend
+      # dials it.
+      - MCP_CHASSIS_ALLOWED_HOSTS
+      # Unset, the chassis serves unauthenticated requests - acceptable only
+      # because it publishes no ports and is reachable from this network alone.
+      # Set it to demand a bearer token; the same value must reach the backend,
+      # which is the side that sends it (its stanza lists this key too).
+      - MCP_CHASSIS_API_KEY
+      # Reserved for a real upstream. main ships only the mock store, so the
+      # example wrapper warns when this is set rather than ignoring it silently
+      # - a warning it can only emit if the value actually arrives here.
+      - EXAMPLE_API_BASE_URL
+    healthcheck:
+      # /healthz sits OUTSIDE the chassis auth gate on purpose, so this probe
+      # works whether or not a key is set. python, not curl/wget: neither is
+      # installed in the python:3.13-slim base the chassis image builds on.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8765/healthz').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # No published ports: only the backend talks to it, over the internal
+    # network (MCP_CHASSIS_URL=http://mcp-chassis:8765/example/mcp).
+
+  # Document generation: an MCP server that turns a structured spec into a real
+  # file (xlsx, docx, pdf, csv, md) or a chart image (png, svg). The model fills
+  # a schema and pinned library code renders it - nothing the model sends is
+  # executed, which is what separates this from a code interpreter.
+  #
+  # NOT profile-gated, for the same reason the chassis is not: MCP tools belong
+  # to the standard `make up` set.
+  doc-gen:
+    restart: on-failure
+    logging: *default-logging
+    build:
+      context: ../services/doc-gen
+    environment:
+      # Both are bare pass-throughs (no `=` default): unset in .env stays UNSET
+      # here, so the service applies its OWN default. Repeating those defaults
+      # here would duplicate them, and compose's copy would WIN - silently
+      # pinning a stale value the day the service changes.
+      #
+      # The Host allow list is the MCP SDK's DNS-rebinding defense: a request
+      # whose Host is not listed is rejected with 421. The default already
+      # covers this service's compose name, which is how the backend dials it.
+      - DOCGEN_ALLOWED_HOSTS
+      # Unset, the sidecar serves unauthenticated requests - acceptable only
+      # because it publishes no ports and is reachable from this network alone.
+      # Set it to demand a bearer token; the same value must reach the backend,
+      # which is the side that sends it (its stanza lists this key too).
+      - DOCGEN_API_KEY
+    healthcheck:
+      # /healthz sits OUTSIDE the auth gate on purpose, so this probe works
+      # whether or not a key is set. python, not curl/wget: neither is installed
+      # in the python:3.13-slim base this image builds on.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8765/healthz').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # No published ports: only the backend talks to it, over the internal
+    # network (DOCGEN_MCP_URL=http://doc-gen:8765/docgen/mcp).
+
+  # Reranker sidecar (Infinity serving bge-reranker-v2-m3; Ollama has no
+  # rerank endpoint). Opt-in via `--profile reranker`, which `make up` adds
+  # exactly when RERANKER_URL names a sidecar - so a machine with no room for
+  # it simply leaves that key unset and retrieves dense-only. First start
+  # downloads the model weights (~1.1GB) into the named cache volume, so
+  # recreates boot warm.
+  #
+  # The --model-id below and the backend's RERANKER_MODEL are two halves of one
+  # decision: a rerank request carries a model name, and only this command says
+  # which weights answer to it. Serve a different reranker and RERANKER_MODEL
+  # moves with it, in the same edit, to whatever name the sidecar then reports.
+  reranker:
+    image: michaelf34/infinity:0.0.77
+    profiles: ["reranker"]
+    restart: on-failure
+    logging: *default-logging
+    command: ["v2", "--model-id", "BAAI/bge-reranker-v2-m3", "--port", "7997"]
+    volumes:
+      - infinity_cache:/app/.cache
+    # No published ports: only the backend talks to it, via the internal
+    # network (RERANKER_URL=http://reranker:7997).
+
+  # Web search sidecar (SearXNG: self-hosted metasearch aggregating public
+  # engines behind one JSON API; free, no account or API key). NOT profile-gated
+  # (unlike the opt-in reranker): web search defaults to `auto` and its composer
+  # toggle is on by default, so the engine must be in the standard `make up` set.
+  # Internal-only - no published ports; only the backend calls it at
+  # http://searxng:8080. It is the ONE service that makes OUTBOUND calls, to the
+  # public engines it aggregates.
+  searxng:
+    image: searxng/searxng:2026.7.6-556d08c39 # pinned; SearXNG uses date-hash tags
+    restart: on-failure
+    logging: *default-logging
+    environment:
+      # Substituted into settings.yml's secret_key placeholder by the image
+      # entrypoint. The instance is internal-only, so this guards nothing
+      # sensitive, but SearXNG requires a non-empty key.
+      - SEARXNG_SECRET=${SEARXNG_SECRET:-change-me-in-real-env}
+    volumes:
+      # Read-only settings mount = the JSON-API enabler: the stock image serves
+      # only html and 403s ?format=json until settings.yml lists json.
+      - ../infra/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    # No published ports: only the backend reaches it (SEARXNG_URL=http://searxng:8080).
+
+  frontend: # real Next.js build (ROADMAP Phase 1). Dev overlay adds hot-reload.
+    restart: on-failure
+    logging: *default-logging
+    build:
+      context: ../apps/frontend
+      target: prod
+    depends_on:
+      backend: { condition: service_healthy }
+    environment:
+      # Server-side only: how the Next server reaches the API (internal network).
+      - BACKEND_INTERNAL_URL=${BACKEND_INTERNAL_URL:-http://backend:8000}
+      # What the product is called on every screen that names it. The same key
+      # the backend reads for its API title, so one line names the whole
+      # deployment. Read by the Next server when a page is requested, never
+      # compiled into the bundle, so one image serves every deployment.
+      #
+      # Passed through rather than defaulted here (as the backend's entry
+      # already is): the fallback name lives in the code that displays it, and
+      # repeating it here would only create a second copy to drift from.
+      #
+      # Named HERE, in the base file, for two reasons. A container receives only
+      # the keys its own `environment:` block lists, so a key set in .env but
+      # missing from this list is silently inert - this stack has been bitten by
+      # exactly that. And the dev and prod layouts both merge onto this file, so
+      # one entry covers both; putting it in an overlay would leave the other
+      # layout unable to name itself.
+      - APP_NAME
+    healthcheck:
+      # node with global fetch, because the image ships neither curl nor wget -
+      # the same reasoning as the backend's python probe. Requesting the app's
+      # own root asserts that the server RENDERS, which is the thing a proxy in
+      # front of it depends on; a socket check would pass while every page 500s.
+      #
+      # The generous start_period is for the DEV image: `next dev` compiles a
+      # route on its first request, so the very first probe of a cold container
+      # does real work. The prod image serves a prebuilt bundle and answers in
+      # milliseconds. An unhealthy verdict never restarts anything either way -
+      # the restart policy is on-failure, which reacts to an exit, not to health.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+  # Object storage for the S3/cloud path. Dev uses the local-fs adapter, so this
+  # only runs when explicitly requested: `--profile minio`. Nothing declares a
+  # dependency on it, so a STORAGE_BACKEND=s3 deployment pointed here must start
+  # the profile itself - see the Object storage section of infra/.env.example.
+  minio:
+    # Pinned, and this IS the newest release: MinIO's tags are timestamps, and
+    # community releases stopped in September 2025, so an old-looking date here
+    # is the current image rather than a neglected pin. It is what `latest`
+    # resolves to (same digest, checked).
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    profiles: ["minio"]
+    restart: on-failure
+    logging: *default-logging
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      # The image ships `mc` (and no curl or wget), and mc's built-in `local`
+      # alias already points at http://localhost:9000, so this is the check
+      # MinIO's own compose examples use. It reports ready, not merely
+      # listening, which is what a dependent service needs.
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "${BIND_HOST:-127.0.0.1}:${MINIO_PORT:-9000}:9000"
+      - "${BIND_HOST:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9001}:9001"
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  ollama_models:
+  minio_data:
+  infinity_cache:
+  # Uploaded attachment bytes, shared by the backend (writes) and the worker
+  # (reads to parse, deletes to clean up). Named, so `make rebuild` cannot
+  # sweep it away with the anonymous dependency volumes.
+  attachment_data:
+
+networks:
+  default:
+    name: ai-chatbot-net

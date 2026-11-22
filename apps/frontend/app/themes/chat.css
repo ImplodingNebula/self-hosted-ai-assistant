@@ -1,0 +1,4338 @@
+/* =====================================================================
+   Chat surface - the theme-agnostic base layer.
+
+   This is the app's port of the prototype skeleton's sections 3-5
+   (layout, message anatomy, base states) from docs/design/prototypes/.
+   It styles the stable `data-part` hooks and the helper classes the chat
+   components render, using ONLY tier-2 (--s-*) and tier-3 (--c-*) tokens
+   plus the shape/motion tokens - never a raw palette value. A theme then
+   restyles on top: Aurora adds a glass/mesh flourish (themes/aurora.css),
+   Minimal subtracts to flat rows (themes/minimal.css). Both key on the
+   same `data-part` hooks, so the markup never forks.
+
+   Kept as plain (unlayered) CSS so it mirrors the prototype cascade
+   exactly: the flourish `@layer theme-flourish` blocks sit below it and
+   add properties this base leaves unset (Aurora) or override with
+   `!important` (Minimal), just as the prototypes do.
+   ===================================================================== */
+
+/* ---------- shell + sidebar ---------- */
+.chat-shell {
+  display: flex;
+  height: 100dvh;
+  width: 100%;
+  /* Above whatever a theme paints behind the app (aurora's sky is a fixed
+     layer at z 0), and the stacking context the main column's veil paints
+     into. */
+  position: relative;
+  z-index: 1;
+}
+
+[data-part="sidebar"] {
+  width: 272px;
+  flex-shrink: 0;
+  background: var(--c-sidebar-bg, var(--s-bg-panel));
+  border-right: 1px solid var(--s-border);
+  display: flex;
+  flex-direction: column;
+  padding: 12px 10px;
+  gap: 4px;
+  /* A stacking context, so a theme that parks its glass blur on a ::before
+     (aurora - see its frosted-glass block for why) keeps that pseudo painting
+     here rather than escalating to the root context. The mobile overlay block
+     below still overrides position and z as it always did. */
+  position: relative;
+  z-index: 0;
+}
+/* Small screens: the sidebar overlays the thread instead of squeezing it.
+   Toggled by data-open on the element (never Tailwind's `hidden`, which
+   this unlayered display rule would otherwise beat). */
+@media (max-width: 767px) {
+  [data-part="sidebar"] {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(300px, 86vw);
+    z-index: 30;
+    transform: translateX(-100%);
+    transition: transform var(--dur-slow) var(--ease-standard);
+    box-shadow: 0 16px 48px var(--s-scrim);
+  }
+  [data-part="sidebar"][data-open="true"] {
+    transform: translateX(0);
+  }
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 8px;
+  font-size: var(--text-title);
+  font-weight: 600;
+  color: var(--s-text);
+}
+/* the mark the boot draws, worn by the brand; it is what travels between the two */
+.brand-mark {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--s-accent);
+}
+/* A quiet, bordered verb: the one filled control on the page is Send, and a
+   solid block here would compete with it from across the pane. */
+.new-chat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  margin: 8px 0 4px;
+  padding: 0 12px;
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-s);
+  color: var(--s-text);
+  font-size: var(--text-label);
+  font-weight: 500;
+  transition:
+    background var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+}
+.new-chat:hover {
+  background: var(--s-bg-raised);
+}
+.side-label {
+  font-size: var(--text-micro);
+  font-weight: 500;
+  color: var(--s-text-3);
+  padding: 16px 10px 4px;
+}
+.convo {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  text-align: left;
+  padding: 10px 10px;
+  border-radius: var(--radius-s);
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background var(--dur-fast) var(--ease-standard), color var(--dur-fast);
+}
+/* Pinned-row hint: inline with the title (the row is a text-ellipsis block,
+   not a flex box - a flex change would break the ellipsis), muted so the
+   title stays the row's loudest element. */
+.convo-pin {
+  display: inline-block;
+  vertical-align: -2px;
+  margin-right: 6px;
+  color: var(--s-text-3);
+}
+.convo:hover {
+  background: var(--s-bg-raised);
+  color: var(--s-text);
+}
+/* The whole row lights up, not just the title button: hovering the kebab (a
+   sibling, not a child) must still say which row it acts on, and the row
+   stays lit while its menu is open for the same reason. */
+.convo-row:hover .convo,
+.convo-row:has(button.convo-action[data-open="true"]) .convo {
+  background: var(--s-bg-raised);
+  color: var(--s-text);
+}
+.convo[aria-current="true"] {
+  background: var(--s-bg-raised);
+  color: var(--s-text);
+  font-weight: 500;
+}
+.side-foot {
+  margin-top: auto;
+  border-top: 1px solid var(--s-border);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.side-foot .convo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.side-foot .convo > .i {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: var(--s-text-3);
+}
+
+/* Signed-in account, the footer's bottom row. Its own hairline above it
+   rather than a gap: the two rows over it are navigation, this one is
+   identity, and the rule is what says they are different kinds of thing.
+   Only rendered when a real sign-in happened, so a deployment with auth
+   switched off has an unchanged footer down to the pixel. */
+.user-chip {
+  margin-top: 8px;
+  padding: 8px 10px 2px;
+  border-top: 1px solid var(--s-border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* min-width:0 is what lets the truncation below actually happen: a flex item
+   defaults to its content's minimum width and would push the sign-out control
+   off the panel instead of clipping the address. */
+.user-chip-id {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.user-chip-name,
+.user-chip-mail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.user-chip-name {
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+}
+.user-chip-mail {
+  font-size: var(--text-micro);
+  color: var(--s-text-3);
+}
+.user-chip-out {
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 0 8px;
+  border-radius: var(--radius-s);
+  font-size: var(--text-micro);
+  color: var(--s-text-3);
+  transition:
+    background var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard);
+}
+.user-chip-out:not(:disabled):hover {
+  background: var(--s-bg-inset);
+  color: var(--s-text);
+}
+.user-chip-out:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---------- main column + topbar ---------- */
+.main-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+
+[data-part="topbar"] {
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--s-border);
+  background: var(--c-topbar-bg);
+  /* Positioned and stacked, so a theme can hang the horizon (its busy tell)
+     off the bar's lower edge and let it fall onto the thread beneath. */
+  position: relative;
+  z-index: 2;
+}
+.title {
+  font-size: var(--text-title);
+  font-weight: 600;
+  color: var(--s-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+/* The title is the rename affordance: clicking it edits, and a pencil fades in
+   on hover so the row says so before it is clicked. Negative margin keeps the
+   text on the same optical line as the plain title it replaces. */
+.title-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 40px;
+  margin-left: -8px;
+  padding: 0 8px;
+  border-radius: var(--radius-s);
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+/* Topbar pinned hint: same muted weight as the sidebar row's glyph, and it
+   must never shrink away when a long title ellipsizes beside it. */
+.title-pin {
+  flex-shrink: 0;
+  color: var(--s-text-3);
+}
+.title-edit:hover {
+  background: var(--s-bg-inset);
+}
+.title-pencil {
+  flex-shrink: 0;
+  color: var(--s-text-3);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+.title-edit:hover .title-pencil,
+.title-edit:focus-visible .title-pencil {
+  opacity: 1;
+}
+/* No hover to reveal it on a touch screen, so it simply stays. */
+@media (hover: none) {
+  .title-pencil {
+    opacity: 1;
+  }
+}
+/* The input hugs its text and grows as it is typed, sized by a hidden
+   replica (the sizer's ::after mirrors the draft with identical metrics,
+   and input + replica share one grid cell). The metrics also mirror
+   .title-edit - same negative margin, same 8px optical inset - so entering
+   and leaving the editor never shifts the first character. */
+.title-size {
+  display: inline-grid;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  margin-left: -8px;
+}
+.title-size::after {
+  content: attr(data-value) " ";
+  grid-area: 1 / 1;
+  visibility: hidden;
+  white-space: pre;
+  overflow: hidden;
+  font-size: var(--text-title);
+  font-weight: 600;
+  padding: 0 8px;
+  border: 1px solid transparent;
+}
+.title-input {
+  grid-area: 1 / 1;
+  width: 100%;
+  min-width: 6ch;
+  padding: 4px 7px;
+  font-size: var(--text-title);
+  font-weight: 600;
+  color: var(--s-text);
+  background: var(--s-bg-inset);
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-s);
+}
+/* The ring draws inside the field, matching the sidebar rename treatment. */
+.title-input:focus-visible {
+  outline-offset: -2px;
+}
+/* Generated-title reveal: a background job names a new conversation moments
+   after its first exchange, and when the title watch (page.tsx) spots the
+   rename, the new name TYPES into place - sidebar row and topbar - instead
+   of snapping. The caret is the streaming caret's smaller sibling, steady
+   rather than blinking because the reveal never pauses. Reduced motion
+   needs no rule here: the component skips the type-out entirely, and the
+   base sheet's blanket stills the aurora sweep (see aurora.css). */
+.reveal-caret {
+  display: inline-block;
+  width: 2px;
+  height: 0.9em;
+  margin-left: 1px;
+  background: var(--s-accent);
+  vertical-align: -0.08em;
+  border-radius: 1px;
+}
+/* The reveal's decorative twin: a duplicate of the typed fragment that a
+   theme may paint over the plain text (aurora's gradient sweep). Hidden
+   here so themes without a treatment show nothing but the words arriving;
+   a theme that uses it re-displays and styles it (see aurora.css). */
+.reveal-glint {
+  display: none;
+}
+.topbar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-left: -8px;
+  border-radius: var(--radius-s);
+  color: var(--s-text-2);
+  transition: background var(--dur-fast) var(--ease-standard), color var(--dur-fast);
+}
+.topbar-toggle .i {
+  width: 16px;
+  height: 16px;
+}
+/* On a desktop the toggle hides the sidebar entirely (DESIGN.md, Layout
+   anatomy); on a phone the sidebar is a drawer and the toggle opens it. */
+@media (min-width: 768px) {
+  .chat-shell[data-nav-collapsed] [data-part="sidebar"] {
+    display: none;
+  }
+}
+.topbar-toggle:hover {
+  background: var(--s-bg-inset);
+  color: var(--s-text);
+}
+
+/* model status: which model, and where it is right now (ModelStatus). A
+   filled dot in memory, a ring on disk, the matrix loader while it loads;
+   the name in mono. On narrow screens only the dot survives. */
+[data-part="model-status"] {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-meta);
+  color: var(--s-text-2);
+  white-space: nowrap;
+}
+[data-part="model-status"] .ms-name {
+  font-family: var(--font-mono);
+  color: var(--s-text);
+}
+.ms-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--s-ok);
+}
+[data-model-state="disk"] .ms-dot {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--s-text-3);
+}
+[data-model-state="loading"] .ms-dot,
+[data-model-state="unknown"] .ms-dot {
+  display: none;
+}
+[data-part="model-status"] .t-matrix {
+  margin-top: 0;
+}
+
+/* ---------- thread ---------- */
+/* The lower edge fades out under a mask, so text dissolves before the
+   composer instead of being cut by it. A mask (not a painted gradient) keeps
+   a theme's sky showing through. */
+[data-part="thread"] {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 20px 44px;
+  display: flex;
+  flex-direction: column;
+  mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - 44px),
+    rgba(0, 0, 0, 0.35) calc(100% - 12px),
+    transparent 100%
+  );
+}
+/* A blurred floater inside a masked scroller samples nothing: the mask makes
+   the thread a backdrop root, and the citation card's frost came out as a
+   clear pane with the transcript showing through. So the fade steps aside
+   while a card is open - the cut lasts as long as the hover, and the card
+   is rarely at the edge the fade covers. The card stays in the thread's DOM
+   on purpose (it is its trigger's next Tab stop). */
+[data-part="thread"]:has(.citation-popover) {
+  mask-image: none;
+}
+/* The reading column is as wide as the composer (--col); the rail and a
+   question's clock time hang outside it in the two gutters. */
+.thread-inner {
+  width: 100%;
+  max-width: calc(var(--col) + 2 * var(--gutter));
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+/* A turn is a stack of rows on one rail. */
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--step-gap);
+  animation: chat-enter var(--dur-base) var(--ease-entrance);
+}
+/* A live turn's rows arrive one by one, each with its own entrance. */
+.turn.live > .step,
+.turn.live > [data-part="tool-trace-list"] > .step {
+  animation: chat-enter var(--dur-base) var(--ease-entrance);
+}
+@keyframes chat-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* ---------- the step: every row of a turn shares one grid ----------
+   time | glyph | body. The rail's time is elapsed since the question, in
+   tabular mono; the glyph takes the row's colour from its kind; a hairline
+   joins each glyph to the next row. The closing row (.step-end) sits a
+   little lower and ends the rail. */
+.step {
+  display: grid;
+  column-gap: var(--rail-gap);
+  grid-template-columns: var(--rail-time) var(--rail-glyph) minmax(0, 1fr);
+  padding-right: var(--gutter);
+  /* the row's first line: the time and the glyph centre on it */
+  --row-lh: 20px;
+}
+.step-time {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  line-height: var(--row-lh);
+  color: var(--s-text-3);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.step-glyph {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  height: 100%;
+  color: var(--step-c, var(--s-text-3));
+}
+/* a shade heavier than the chrome's icons: one small mark beside a column
+   of bright prose has to hold its own */
+.step-glyph > svg.i {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: calc((var(--row-lh) - 16px) / 2);
+  stroke-width: 1.75;
+}
+/* The segment and its light (the ::before a landed-on turn draws, below)
+   share one geometry, so every rule on where the rail ends moves both. A
+   ::before with no content paints nothing. */
+.step-glyph::after,
+.step-glyph::before {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--row-lh) / 2 + 14px);
+  bottom: calc(-1 * var(--step-gap) + 2px);
+}
+/* The line is the centre column of a 30px box, cut by a mask; the light's
+   core (below) is drawn with the same stops in the same box, so the two
+   share a pixel column wherever the column's edge lands (a 1px box beside a
+   1px gradient snapped a column apart at some widths, and the line's own
+   lighting showed beside the core). */
+.step-glyph::after {
+  content: "";
+  width: 30px;
+  margin-left: -15px;
+  pointer-events: none;
+  background: var(--s-border-strong);
+  mask-image: linear-gradient(
+    to right,
+    transparent 50%,
+    #000 50%,
+    #000 calc(50% + 1px),
+    transparent calc(50% + 1px)
+  );
+}
+/* The rail ends at the closing row, and at a live turn's last row (and so
+   does its light, the ::before drawn for a landed-on turn below). */
+.step-end .step-glyph::after,
+.step-end .step-glyph::before,
+.turn > .step:last-child .step-glyph::after,
+.turn > .step:last-child .step-glyph::before,
+.turn > [data-part="tool-trace-list"]:last-child > .step:last-child .step-glyph::after,
+.turn > [data-part="tool-trace-list"]:last-child > .step:last-child .step-glyph::before {
+  display: none;
+}
+/* The closing row is about the answer, not part of it: it sits further
+   down, and speaks in a smaller, quieter voice. */
+.step-end {
+  margin-top: 10px;
+}
+/* a closing row that opens with the chips or the verbs (28px rows) centres
+   its check and time on them; one that opens with a notice keeps the line */
+.step-end:has(> .step-body > :first-child:is([data-part="citations"], [data-part="turn-actions"])) {
+  --row-lh: 28px;
+}
+.step:has(+ .step-end) .step-glyph::after,
+.step:has(+ .step-end) .step-glyph::before {
+  bottom: calc(-1 * var(--step-gap) - 8px);
+}
+.step-body {
+  min-width: 0;
+}
+/* The closing row's parts - notices, sources, files, the footer - breathe. */
+.step-end .step-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.step[data-kind="thought"] {
+  --step-c: var(--c-step-thought);
+}
+.step[data-kind="tool"] {
+  --step-c: var(--c-step-tool);
+}
+.step[data-kind="confirm"] {
+  --step-c: var(--c-step-confirm);
+}
+.step[data-kind="answer"] {
+  --step-c: var(--c-step-answer);
+  /* the answer's first line is prose, taller than the chrome's: the time
+     and the glyph centre on it, not on a line above it */
+  --row-lh: calc(var(--text-prose) * var(--text-prose-line));
+}
+.step[data-kind="error"] {
+  --step-c: var(--c-step-error);
+}
+.step[data-kind="end"] {
+  --step-c: var(--s-ok);
+}
+/* The tool rows are wrapped for the citation popover's scroll target; the
+   wrapper is not a box, so the rows stay on the turn's rail. */
+[data-part="tool-trace-list"] {
+  display: contents;
+}
+
+/* The user's side: right-aligned, the clock time beside the bubble in the
+   right gutter, no rail. */
+.turn-user .step {
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 0;
+  padding: 0 0 0 var(--gutter);
+}
+.turn-user .step-glyph {
+  display: none;
+}
+.turn-user .step-time {
+  order: 2;
+  width: var(--gutter);
+  padding-left: var(--rail-gap);
+  text-align: left;
+  line-height: 44px;
+  flex-shrink: 0;
+}
+.turn-user .step-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 82%;
+}
+
+/* Under 768px the rail time and both gutters go; the glyph column stays, so
+   a turn still reads as a sequence. The topbar's status keeps only its dot,
+   and the figures drop the model name. */
+@media (max-width: 767px) {
+  :root {
+    --rail-time: 0px;
+    --rail-gap: 8px;
+    --gutter: 0px;
+  }
+  .step {
+    grid-template-columns: var(--rail-glyph) minmax(0, 1fr);
+  }
+  .step-time {
+    display: none;
+  }
+  .turn-user .step {
+    padding-left: 0;
+  }
+  .turn-user .step-body {
+    max-width: 92%;
+  }
+  [data-part="thread"] {
+    padding: 20px 14px 40px;
+  }
+  [data-part="model-status"] .ms-state,
+  [data-part="model-status"] .ms-name {
+    display: none;
+  }
+  .ctl .lbl,
+  .meta-model,
+  .tool-query,
+  .hint {
+    display: none;
+  }
+  /* The tag gives way first, so attach, the toggles, the ring, the model
+     and Send all fit one line at 390px (the pane's narrow inset is set
+     beside its base rule, which this block would otherwise lose to). */
+  [data-part="model-select"] .model-trigger {
+    min-width: 0;
+    max-width: 7rem;
+  }
+}
+
+/* empty state */
+/* ---------- the new chat: the greeting and the composer, together ----------
+   No thread yet, so there is no reading column to protect: the greeting and
+   the composer sit together a little above centre and the rest of the pane
+   is open. The line under the greeting says what this install can reach
+   right now, in the glyphs the rail will use once a turn runs. Sending docks
+   the composer to the foot of the pane (the box travels, see the view
+   transitions below). */
+body[data-view="new"] [data-part="thread"],
+body[data-view="new"] [data-part="jump-to-latest"] {
+  display: none;
+}
+.welcome {
+  margin-top: auto;
+  padding: 0 20px 26px;
+  text-align: center;
+  /* The entrance is a transition out of the starting style below and no
+     keyframe animation, so it can only play as the greeting first renders. An
+     animation held back while a view transition carries the greeting in
+     would start the moment the hold was lifted, a second arrival. */
+  transition:
+    opacity var(--dur-slow) var(--ease-entrance),
+    transform var(--dur-slow) var(--ease-entrance);
+}
+@starting-style {
+  .welcome {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+body[data-view="new"] [data-part="composer"] {
+  margin-bottom: auto;
+  padding-bottom: 4vh;
+}
+body[data-view="new"] .composer-box {
+  max-width: 44rem;
+}
+.welcome-head {
+  width: fit-content;
+  margin-inline: auto;
+  font-family: var(--font-prose);
+  font-size: clamp(27px, 3.3vw, 42px);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  color: var(--s-text);
+}
+/* the one word the theme owns: in italic, in the accent */
+.welcome-head em,
+.boot-head em {
+  font-style: italic;
+  color: var(--s-accent);
+  padding-right: 0.04em;
+}
+.reach {
+  list-style: none;
+  width: fit-content;
+  margin: 16px auto 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px 24px;
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+}
+.reach li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.reach b {
+  font-weight: 500;
+  color: var(--s-text);
+}
+.reach svg.i {
+  width: 15px;
+  height: 15px;
+  color: var(--c-step-tool);
+}
+/* anything the pane has to say before the first message sits under the reach line */
+.welcome-note:not(:empty) {
+  margin-top: 22px;
+}
+.welcome-note > * {
+  margin-inline: auto;
+}
+/* the note is a row in the thread; here it is a centred block of its own width */
+.welcome [data-part="error"],
+.welcome [data-part="no-chat-model"] {
+  justify-content: center;
+  width: fit-content;
+  max-width: 44rem;
+}
+
+/* ---------- boot: the waits the shell blocks on ----------
+   Before the shell can mean anything the window is the boot's: the mark
+   draws itself in and keeps a slow halo; the name sits under it; the
+   headline names what is being waited on with the waited-on word lit; a rail
+   of three nodes lights as each wait ends. A wait that runs long says so,
+   counts, and offers a retry. The chart of rings on the canvas is the sky's
+   (aurora alone draws it). */
+/* the shell is mounted beneath the boot, hidden, so its own fetches run
+   meanwhile; before hydration writes the view, the same (the server's HTML
+   carries the boot, and the shell under it must not show through) */
+body[data-view="boot"] .chat-shell,
+body:not([data-view]) .chat-shell {
+  display: none;
+}
+.boot {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px 8vh;
+  text-align: center;
+}
+.boot > * {
+  position: relative;
+  z-index: 1;
+}
+.boot-chart {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.boot-mark {
+  position: relative;
+  width: 62px;
+  height: 62px;
+  color: var(--s-accent);
+}
+.boot-mark svg.i {
+  width: 100%;
+  height: 100%;
+  stroke-width: 1.2;
+  overflow: visible;
+}
+/* the mark draws itself in once (the paths are measured as one unit). The
+   drawn state is the rest state and the start lives in the keyframe, so
+   reduced motion, which strips the animation, shows the mark whole. */
+.boot-mark path {
+  stroke-dasharray: 1;
+  animation: boot-draw 1100ms var(--ease-standard) both;
+}
+.boot-mark path + path {
+  animation-delay: 240ms;
+}
+@keyframes boot-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.boot-name {
+  margin-top: 24px;
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--s-text-2);
+  animation: enter 600ms var(--ease-entrance) 300ms both;
+}
+/* the headline swaps with each wait */
+.boot-head {
+  width: fit-content;
+  margin: 12px auto 0;
+  font-family: var(--font-prose);
+  font-size: clamp(27px, 3.3vw, 42px);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  color: var(--s-text);
+  min-height: 1.12em;
+}
+.boot-head.swap-in {
+  animation: boot-head-in 560ms var(--ease-entrance) both;
+}
+@keyframes boot-head-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(5px);
+  }
+}
+.boot-sub {
+  margin-top: 12px;
+  min-height: 18px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--s-text-2);
+}
+/* the rail: three nodes on a line; the lit length grows as waits end */
+.boot-rail {
+  list-style: none;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(100%, 40rem);
+  margin: 46px 0 0;
+  padding: 0;
+  animation: enter 700ms var(--ease-entrance) 700ms both;
+}
+.boot-rail::before,
+.boot-rail::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  left: calc(100% / 6);
+  right: calc(100% / 6);
+  height: 1px;
+  background: var(--s-border-strong);
+}
+.boot-rail::after {
+  right: auto;
+  width: calc((100% - 100% / 3) * var(--lit, 0));
+  background: var(--s-accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--s-accent) 70%, transparent);
+  transition: width 700ms var(--ease-standard);
+}
+.boot-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--s-text-3);
+  transition: color var(--dur-base) var(--ease-standard);
+}
+.boot-node[data-step="live"] {
+  color: var(--s-text);
+}
+.boot-node[data-step="done"] {
+  color: var(--s-text-2);
+}
+.boot-node small {
+  display: block;
+  margin-top: 3px;
+  min-height: 16px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--s-text-3);
+}
+.boot-dot {
+  position: relative;
+  z-index: 1;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--s-border-strong);
+  background: var(--s-bg-app);
+  transition:
+    border-color var(--dur-base) var(--ease-standard),
+    background var(--dur-base) var(--ease-standard);
+}
+/* the check and the live pulse share one cell, so each sits dead centre */
+.boot-dot > svg,
+.boot-dot::after {
+  grid-area: 1 / 1;
+}
+.boot-dot svg.i {
+  width: 13px;
+  height: 13px;
+  opacity: 0;
+  transform: scale(0.5);
+  transition:
+    opacity var(--dur-base) var(--ease-standard),
+    transform var(--dur-slow) var(--ease-entrance);
+}
+.boot-node[data-step="live"] .boot-dot {
+  border-color: color-mix(in srgb, var(--s-accent) 45%, transparent);
+}
+.boot-node[data-step="live"] .boot-dot::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 68%, var(--s-accent) 100%);
+  mask: radial-gradient(circle, transparent 10.5px, #000 11.5px);
+  animation: boot-spin 1100ms linear infinite;
+}
+.boot-node[data-step="live"] .boot-dot::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--s-accent);
+  animation: boot-pulse 1100ms ease-in-out infinite;
+}
+.boot-node[data-step="done"] .boot-dot {
+  background: var(--s-accent);
+  border-color: var(--s-accent);
+  color: var(--s-on-accent);
+}
+.boot-node[data-step="done"] .boot-dot svg.i {
+  opacity: 1;
+  transform: none;
+}
+@keyframes boot-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes boot-pulse {
+  50% {
+    transform: scale(0.55);
+    opacity: 0.5;
+  }
+}
+.boot-slow {
+  max-width: 32rem;
+  margin-top: 32px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--s-text-2);
+  animation: enter var(--dur-slow) var(--ease-entrance);
+}
+.boot-slow-verbs {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+/* the hit-target floor: a verb offered to a person who is already waiting */
+.boot-slow .btn {
+  min-height: 40px;
+}
+@media (max-width: 560px) {
+  /* a tall narrow screen has no room around the words for rings */
+  .boot-chart {
+    display: none;
+  }
+  .boot-rail {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    justify-items: start;
+    width: auto;
+    margin-top: 36px;
+  }
+  .boot-rail::before,
+  .boot-rail::after {
+    display: none;
+  }
+  .boot-node {
+    flex-direction: row;
+    text-align: left;
+  }
+}
+
+/* ---------- what travels between views ----------
+   A name is carried only while a transition runs (html[data-vt]): a named
+   element is a backdrop root, and the model menu inside the composer would
+   then blur nothing. Thread and new chat: the composer box, over a page
+   that stays live (below). Boot to new
+   chat: the mark into the sidebar's brand, the headline into the greeting,
+   each node into its reach item. Text is never stretched to the moving box:
+   each image keeps its size and the two cross-fade in place. */
+html[data-vt="composer"] .composer-box {
+  view-transition-name: composer-box;
+}
+::view-transition-group(composer-box),
+::view-transition-group(composer-hint) {
+  z-index: 1;
+  animation-duration: 420ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 260ms;
+}
+/* Thread and new chat: the page behind the box stays live. Its old image is
+   dropped and the new one stands whole from the first frame, so whatever in
+   the backdrop follows the composer (a theme's window onto the sky) travels
+   with the box, where two cross-fading images would show it at both ends of
+   the trip at once. What the two views do not share is named instead and
+   fades on the root's clock - the greeting, the thread with its jump
+   button, the bar with its title - and the line under the composer
+   travels with the box. The rest of the page (the sidebar's lit row)
+   changes live, on its own transitions. */
+html[data-vt="composer"]::view-transition-old(root) {
+  display: none;
+}
+html[data-vt="composer"]::view-transition-new(root) {
+  animation: none;
+}
+html[data-vt="composer"] .welcome {
+  view-transition-name: pane-welcome;
+}
+html[data-vt="composer"] [data-part="thread"] {
+  view-transition-name: pane-thread;
+}
+/* the jump button only while it shows; and a named element's backdrop
+   filter moves to its group, a square with no radius, so the group drops
+   it: the disc fades without its frost rather than leave a blurred patch */
+html[data-vt="composer"] [data-part="jump-to-latest"][data-visible="true"] {
+  view-transition-name: pane-jump;
+}
+::view-transition-group(pane-jump) {
+  backdrop-filter: none;
+}
+html[data-vt="composer"] [data-part="topbar"] {
+  view-transition-name: pane-topbar;
+}
+/* the bar stands over the thread, as it does at rest: a theme's light
+   along its lower edge falls on the thread, not under it */
+::view-transition-group(pane-topbar) {
+  z-index: 1;
+}
+html[data-vt="composer"] [data-part="composer"] > .hint {
+  view-transition-name: composer-hint;
+}
+::view-transition-old(pane-welcome),
+::view-transition-new(pane-welcome),
+::view-transition-old(pane-thread),
+::view-transition-new(pane-thread),
+::view-transition-old(pane-jump),
+::view-transition-new(pane-jump),
+::view-transition-old(pane-topbar),
+::view-transition-new(pane-topbar) {
+  animation-duration: 260ms;
+}
+::view-transition-old(composer-hint),
+::view-transition-new(composer-hint) {
+  height: 100%;
+  object-fit: none;
+}
+/* chat into console: the topbar is one bar across the two, and the rail
+   stands where the sidebar stood (at its width), so each morphs into the
+   other in place. On a phone the sidebar is a drawer off the edge, so only
+   the bar travels there. */
+html[data-vt="console"] [data-part="topbar"] {
+  view-transition-name: topbar;
+}
+@media (min-width: 768px) {
+  html[data-vt="console"] [data-part="sidebar"],
+  html[data-vt="console"] [data-part="console-rail"] {
+    view-transition-name: side-rail;
+  }
+}
+/* The chat's chrome is a full-height sidebar beside a bar; the console's is
+   a full-width bar over a rail. The two never share a shape at the top-left
+   corner, so no box is morphed across it: the side column's group stands
+   full-height at the left for the whole travel (its position and size are
+   set here, over the browser's), each snapshot drawn at natural size exactly
+   where its element stood, the old fading as the new arrives in place; the
+   bar's box does travel, from the sidebar's edge to the window's, and its
+   snapshots keep their right edge, so the chat's bar slides aside and the
+   console's is revealed from the left like a wipe over the sidebar's head.
+   The bar is painted over the column, so the corner is the brand fading
+   under the arriving bar, never a hole. */
+::view-transition-group(topbar) {
+  z-index: 2;
+  animation-duration: 360ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+::view-transition-old(topbar),
+::view-transition-new(topbar) {
+  height: 100%;
+  object-fit: none;
+  object-position: right top;
+}
+::view-transition-group(side-rail) {
+  z-index: 1;
+  animation: none;
+  transform: none;
+  width: 272px;
+  height: 100dvh;
+}
+::view-transition-old(side-rail),
+::view-transition-new(side-rail) {
+  width: 100%;
+  height: 100%;
+  object-fit: none;
+  object-position: left top;
+}
+::view-transition-old(side-rail) {
+  animation: 220ms var(--ease-standard) both vt-fade-out;
+}
+::view-transition-new(side-rail) {
+  animation: 320ms var(--ease-entrance) 40ms both vt-fade-in;
+}
+/* the rail stands under the bar: its snapshot sits 48px down the column */
+html[data-vt-to="console"]::view-transition-new(side-rail),
+html[data-vt-to="new"]::view-transition-old(side-rail),
+html[data-vt-to="thread"]::view-transition-old(side-rail) {
+  object-position: left 48px;
+}
+/* on the way back the console's bar is cropped away from the left as its
+   box shrinks to the sidebar's edge; it fades quicker than it shrinks, so
+   "Console" never ghosts over the brand it passes */
+html[data-vt-to="new"]::view-transition-old(topbar),
+html[data-vt-to="thread"]::view-transition-old(topbar) {
+  animation-duration: 160ms;
+}
+@keyframes vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+html[data-vt="boot"] .boot-mark,
+html[data-vt="boot"] .brand-mark {
+  view-transition-name: brand-mark;
+}
+html[data-vt="boot"] .boot-head,
+html[data-vt="boot"] .welcome-head {
+  view-transition-name: headline;
+}
+html[data-vt="boot"] .boot-node:nth-child(1),
+html[data-vt="boot"] .reach > li:nth-child(1) {
+  view-transition-name: node-1;
+}
+html[data-vt="boot"] .boot-node:nth-child(2),
+html[data-vt="boot"] .reach > li:nth-child(2) {
+  view-transition-name: node-2;
+}
+html[data-vt="boot"] .boot-node:nth-child(3),
+html[data-vt="boot"] .reach > li:nth-child(3) {
+  view-transition-name: node-3;
+}
+::view-transition-group(brand-mark),
+::view-transition-group(headline),
+::view-transition-group(node-1),
+::view-transition-group(node-2),
+::view-transition-group(node-3) {
+  animation-duration: 560ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+::view-transition-old(headline),
+::view-transition-old(node-1),
+::view-transition-old(node-2),
+::view-transition-old(node-3) {
+  animation-duration: 320ms;
+}
+::view-transition-old(headline),
+::view-transition-new(headline) {
+  height: 100%;
+  object-fit: none;
+}
+::view-transition-old(node-1),
+::view-transition-new(node-1),
+::view-transition-old(node-2),
+::view-transition-new(node-2),
+::view-transition-old(node-3),
+::view-transition-new(node-3) {
+  height: 100%;
+  object-fit: contain;
+}
+/* what a transition carries in has its own entrance held back: the
+   transition is the arrival */
+html[data-vt] .welcome {
+  transition: none;
+}
+html[data-vt] .boot-name,
+html[data-vt] .boot-rail {
+  animation: none;
+}
+
+/* pane-level loading cue */
+.pane-loading {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pane-loading span {
+  font-size: var(--text-meta);
+  color: var(--s-text-3);
+  background: color-mix(in srgb, var(--s-bg-panel) 92%, transparent);
+  border: 1px solid var(--s-border);
+  border-radius: 99px;
+  padding: 6px 14px;
+  animation: chat-pulse 1.4s var(--ease-standard) infinite;
+}
+
+/* ---------- message anatomy ---------- */
+[data-part="bubble-user"] {
+  max-width: min(100%, 40rem);
+  line-height: var(--text-body-line);
+  background: var(--c-bubble-user-bg);
+  color: var(--c-bubble-user-fg);
+  padding: 11px 16px;
+  border-radius: var(--radius-bubble);
+  border-top-right-radius: 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The answer: no card, one reading column, in the theme's prose face at its
+   prose size. A theme that wants a measure sets --prose-measure; blocks
+   that lay themselves out (code, a table) keep the column's full width. */
+[data-part="content"] {
+  overflow-wrap: anywhere;
+  font-family: var(--font-prose);
+  font-size: var(--text-prose);
+  color: var(--s-text);
+}
+[data-part="content"].prose {
+  /* No white-space: pre-wrap - the answer is parsed markdown now, so the
+     document's own structure decides where lines break. Leaving it on would add
+     the source's newlines back on TOP of the rendered blocks. */
+  line-height: var(--text-prose-line);
+}
+[data-part="content"] > :not([data-part="code-block"]):not(.md-table-wrap) {
+  max-width: var(--prose-measure);
+}
+[data-part="content"] p + p {
+  margin-top: 10px;
+}
+/* The markers are set back explicitly: the CSS reset strips list-style from
+   every ul and ol, so a rendered list would otherwise lose its bullets AND its
+   numbers, leaving an ordered list indistinguishable from a stack of lines. */
+[data-part="content"] ul,
+[data-part="content"] ol {
+  padding-left: 22px;
+  margin: 8px 0;
+}
+[data-part="content"] ul {
+  list-style: disc;
+}
+[data-part="content"] ol {
+  list-style: decimal;
+}
+[data-part="content"] ul ul {
+  list-style: circle;
+}
+[data-part="content"] ul ul ul {
+  list-style: square;
+}
+[data-part="content"] li + li {
+  margin-top: 4px;
+}
+/* A nested list belongs to the item above it, so it sits tight against it
+   rather than opening the same gap as a new list in the answer. */
+[data-part="content"] li > ul,
+[data-part="content"] li > ol {
+  margin: 4px 0;
+}
+
+/* Headings inside a bubble are landmarks in an answer, not page titles - but
+   landmarks still need to OUTRANK each other. Adjacent levels differ by a real
+   size step down to h4; below that, size keeps falling and h6 dims, so all six
+   levels stay tellable apart (a flatter 1.17/1.08/1em scale shipped first and
+   read as six identical bold lines - owner-flagged, 2026-08-06). */
+[data-part="content"] h1,
+[data-part="content"] h2,
+[data-part="content"] h3,
+[data-part="content"] h4,
+[data-part="content"] h5,
+[data-part="content"] h6 {
+  margin: 14px 0 6px;
+  line-height: 1.3;
+}
+[data-part="content"] h1,
+[data-part="content"] h2 {
+  margin: 16px 0 8px;
+}
+[data-part="content"] h1 {
+  font-size: 1.35em;
+  font-weight: 650;
+}
+[data-part="content"] h2 {
+  font-size: 1.2em;
+  font-weight: 650;
+}
+[data-part="content"] h3 {
+  font-size: 1.1em;
+  font-weight: 650;
+}
+[data-part="content"] h4 {
+  font-size: 1em;
+  font-weight: 700;
+}
+[data-part="content"] h5 {
+  font-size: 0.95em;
+  font-weight: 700;
+}
+[data-part="content"] h6 {
+  font-size: 0.9em;
+  font-weight: 700;
+  color: var(--s-text-2);
+}
+[data-part="content"] strong,
+[data-part="content"] b {
+  font-weight: 600;
+}
+/* An answer that opens with a heading should not open with a gap above it, and
+   one that ends in a list should not double-space before the sources row. */
+[data-part="content"] > :first-child {
+  margin-top: 0;
+}
+[data-part="content"] > :last-child {
+  margin-bottom: 0;
+}
+
+[data-part="content"] blockquote {
+  border-left: 2px solid var(--s-border-strong);
+  padding-left: 12px;
+  color: var(--s-text-2);
+  margin: 8px 0;
+}
+[data-part="content"] hr {
+  border: none;
+  border-top: 1px solid var(--s-border);
+  margin: 12px 0;
+}
+
+/* Code is a component: a head with the language label and a copy button,
+   then the code with syntax colour on the --c-code-* tokens. A block scrolls
+   on its own so a long line cannot widen the column past the pane. */
+[data-part="code-block"] {
+  margin: 14px 0 0;
+  max-width: 100%;
+  font-family: var(--font-ui);
+  background: var(--c-code-bg);
+  border: 1px solid var(--s-border);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+}
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  padding: 0 6px 0 14px;
+  border-bottom: 1px solid var(--s-border);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--s-text-3);
+}
+[data-part="code-block"] pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--c-code-fg);
+  padding: 12px 14px;
+  overflow-x: auto;
+  tab-size: 2;
+}
+.tk-c {
+  color: var(--c-code-com);
+  font-style: italic;
+}
+.tk-k {
+  color: var(--c-code-key);
+}
+.tk-s {
+  color: var(--c-code-str);
+}
+.tk-n {
+  color: var(--c-code-num);
+}
+.tk-f {
+  color: var(--c-code-fn);
+}
+[data-part="content"] code:not(pre code) {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--c-inline-code-bg);
+  border: 1px solid var(--s-border);
+  border-radius: 5px;
+  padding: 1px 5px;
+}
+/* Inside a block the chrome belongs to the <pre>, so the inner <code> drops it. */
+[data-part="content"] pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* The icon verbs: the code head's copy, and the closing row's actions. The
+   painted box is 28px; the hit area reaches the 40px floor invisibly. */
+.copy-btn,
+.act-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--s-text-2);
+  transition:
+    background var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard);
+}
+.copy-btn::after,
+.act-btn::after {
+  content: "";
+  position: absolute;
+  inset: -6px -2px;
+}
+.copy-btn:hover,
+.act-btn:hover {
+  background: var(--c-tool-bg);
+  color: var(--s-text);
+}
+.copy-btn svg,
+.act-btn svg {
+  width: 14px;
+  height: 14px;
+}
+/* The copy glyph cross-fades to a tick in --s-ok while the copy is fresh. */
+.copy-btn .ic {
+  position: relative;
+  width: 14px;
+  height: 14px;
+}
+.copy-btn .ic svg {
+  position: absolute;
+  inset: 0;
+  transition:
+    opacity var(--dur-base) ease-in-out,
+    transform var(--dur-base) ease-in-out,
+    filter var(--dur-base) ease-in-out;
+}
+.copy-btn .ic .ok {
+  opacity: 0;
+  transform: scale(0.6);
+  filter: blur(2px);
+  color: var(--s-ok);
+}
+.copy-btn[data-copied] .ic .ok {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+.copy-btn[data-copied] .ic .cp {
+  opacity: 0;
+  transform: scale(0.6);
+  filter: blur(2px);
+}
+
+/* Links the ANSWER contains. Scoped tightly: the source chips below it are
+   anchors too, and they carry their own treatment. */
+[data-part="content"] p a,
+[data-part="content"] li a,
+[data-part="content"] td a,
+[data-part="content"] th a,
+[data-part="content"] blockquote a,
+[data-part="content"] h1 a,
+[data-part="content"] h2 a,
+[data-part="content"] h3 a,
+[data-part="content"] h4 a,
+[data-part="content"] h5 a,
+[data-part="content"] h6 a {
+  color: var(--s-accent);
+  text-decoration: underline;
+}
+[data-part="content"] p a:hover,
+[data-part="content"] li a:hover,
+[data-part="content"] td a:hover,
+[data-part="content"] th a:hover,
+[data-part="content"] blockquote a:hover,
+[data-part="content"] h1 a:hover,
+[data-part="content"] h2 a:hover,
+[data-part="content"] h3 a:hover,
+[data-part="content"] h4 a:hover,
+[data-part="content"] h5 a:hover,
+[data-part="content"] h6 a:hover {
+  color: var(--s-accent-hover);
+}
+
+/* A table is given its own scroller (see the components map) for the same
+   reason a code block gets one: the bubble's width is the pane's, and a wide
+   table would otherwise push the whole conversation sideways. */
+[data-part="content"] .md-table-wrap {
+  overflow-x: auto;
+  margin: 8px 0;
+}
+[data-part="content"] table {
+  border-collapse: collapse;
+}
+[data-part="content"] th,
+[data-part="content"] td {
+  padding: 6px 10px;
+  border: 1px solid var(--c-table-border);
+  /* The bubble breaks mid-word so a pasted URL cannot widen it, but a cell that
+     inherits that shatters its words to stay narrow and the scroller above
+     never engages. Inside the table, words stay whole and the table scrolls. */
+  overflow-wrap: normal;
+}
+[data-part="content"] th {
+  font-weight: 600;
+  background: var(--c-table-head-bg);
+  /* Left like the cells beneath: the UA centers table headings, and a centered
+     label over a left-aligned column reads as a misalignment. A column the
+     answer explicitly aligns carries an inline style, which still wins. */
+  text-align: left;
+}
+
+/* Task lists: the checkboxes render disabled (they report what the answer said,
+   they are not controls), so they only need to sit on the text baseline. The
+   list drops its marker - the checkbox IS the marker, and a bullet beside it
+   reads as two. */
+[data-part="content"] ul.contains-task-list {
+  list-style: none;
+  /* Zero, not a token gap: the checkbox plus its margin then lands the item's
+     TEXT within a pixel of a sibling list's, so mixed lists read as one column. */
+  padding-left: 0;
+}
+/* The hand-drawn checkbox (see the components map for why the native control
+   cannot be used: disabled inputs render washed out on every browser). */
+[data-part="content"] .md-check {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  border: 1.5px solid var(--s-border-strong);
+  border-radius: 4px;
+  margin-right: 7px;
+  vertical-align: -0.1em;
+  position: relative;
+}
+[data-part="content"] .md-check[data-checked] {
+  background: var(--s-accent);
+  border-color: var(--s-accent);
+}
+[data-part="content"] .md-check[data-checked]::after {
+  content: "";
+  position: absolute;
+  left: 0.28em;
+  top: 0.08em;
+  width: 0.24em;
+  height: 0.48em;
+  border: solid var(--s-on-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* An image is rendered as an inert label, never fetched (see the components
+   map), so it is given the inline-code treatment: it reads as an artifact the
+   answer named rather than as prose. */
+[data-part="content"] .md-image {
+  font-size: 0.88em;
+  background: var(--s-bg-inset);
+  border: 1px solid var(--s-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+/* What an answer falls back to when it cannot be parsed as markdown: exactly
+   the plain rendering it had before, so the model's own line breaks survive. */
+[data-part="content"] .md-fallback {
+  white-space: pre-wrap;
+}
+
+/* A citation marker is a real <button> (see CitationMarker) so it can be
+   focused, activated and announced - this resets the browser's default button
+   chrome back to the plain superscript text it reads as. */
+.citation-marker-wrap {
+  position: relative;
+  display: inline;
+}
+.cite-mark {
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  vertical-align: super;
+  color: var(--s-accent);
+  padding: 0 1px;
+  border-radius: 3px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard);
+}
+/* The marker fills under the pointer, as the prototype draws it. */
+.cite-mark:hover {
+  background: color-mix(in srgb, var(--s-accent) 26%, transparent);
+}
+/* Open, or lit by its chip: a fuller fill and the number in the text ink -
+   two channels (fill and luminance), not hue alone, so a hovered/pinned chip
+   lighting up its markers (and vice versa) still reads for a reader who
+   cannot distinguish the accent. */
+.cite-mark[data-highlighted="true"] {
+  background: color-mix(in srgb, var(--s-accent) 30%, transparent);
+  color: var(--s-text);
+}
+
+/* ---------- disclosure rows (thought, tool): a quiet line that opens in place ----------
+   The panel is a grid track from 0fr to 1fr, so opening never mounts anything
+   and the height eases. A row with nothing to open is a plain line. */
+/* Block-level and content-wide: an inline box would sit on the body's
+   taller baseline and drop below the rail glyph beside it. The line is the
+   rail's, so the glyph centres on the words. */
+.disc-btn {
+  position: relative;
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+  max-width: 100%;
+  font-size: var(--text-label);
+  line-height: 20px;
+  color: var(--s-text-2);
+  text-align: left;
+  border-radius: 4px;
+}
+button.disc-btn::after {
+  content: "";
+  position: absolute;
+  inset: -10px -8px;
+}
+button.disc-btn:hover {
+  color: var(--s-text);
+}
+.disc-btn .chev {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--s-text-3);
+  transition: transform var(--dur-base) var(--ease-entrance);
+}
+.disc-btn[aria-expanded="true"] .chev {
+  transform: rotate(180deg);
+}
+.disc-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--dur-slow) var(--ease-entrance),
+    opacity var(--dur-base) var(--ease-standard),
+    visibility 0s var(--dur-slow);
+}
+.disc-panel > div {
+  overflow: hidden;
+  min-height: 0;
+}
+.disc-btn[aria-expanded="true"] + .disc-panel {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+
+/* thinking: the reasoning, a quieter prose under its row. The rule and the
+   fill are tokens so a theme can take them away (aurora: bare text). */
+[data-part="thinking"] .think-body {
+  margin-top: 8px;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--c-thinking-rule);
+  background: var(--c-thinking-bg);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--s-text-2);
+  max-width: 68ch;
+  white-space: pre-wrap;
+}
+/* The static badge that replaces the ambient thinking tell under reduced
+   motion (the row's loader still runs; the badge is what a still frame
+   carries). */
+.tag-live {
+  display: none;
+  font-size: var(--text-micro);
+  font-weight: 500;
+  color: var(--step-c);
+  border: 1px solid currentColor;
+  border-radius: 99px;
+  padding: 0 7px;
+  line-height: 16px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .turn.live .tag-live {
+    display: inline-block;
+  }
+  /* A still loader still reads as one: the odd dots lit. */
+  .t-matrix i:nth-child(odd) {
+    background: var(--mx, var(--s-text-2));
+  }
+}
+
+/* tool rows: one summary-row anatomy in every theme - the label, an inline
+   preview of the call's leading argument in mono, any approval badge, and a
+   trailing meta word only for the states the glyph cannot carry alone. The
+   base sheet cards the row as a hairline chip on the tool tint; a theme
+   whose rail narrates (aurora) takes the chip away. */
+[data-part="tool-trace"] .disc-btn {
+  min-height: 36px;
+  padding: 6px 14px;
+  background: var(--c-tool-bg);
+  border: 1px solid var(--s-border);
+  border-radius: var(--radius-m);
+}
+.tool-narration {
+  white-space: pre-wrap;
+  margin-bottom: 6px;
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+}
+[data-part="tool-trace"] .tool-label {
+  color: var(--s-text);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.tool-query {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--s-text-2);
+}
+.tool-meta {
+  font-size: var(--text-meta);
+  color: var(--s-text-3);
+  white-space: nowrap;
+}
+.tool-badge {
+  font-size: var(--text-micro);
+  font-weight: 600;
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+  border-radius: 99px;
+  padding: 1px 7px;
+  border: 1px solid currentColor;
+}
+.tool-badge.approved {
+  color: var(--s-warn);
+}
+.tool-badge.denied {
+  color: var(--s-danger);
+}
+/* A failed or blocked call wears the danger colour on its glyph. */
+[data-part="tool-trace"][data-state="danger"] {
+  --step-c: var(--c-step-error);
+}
+/* One "working" tell for an attachment chip while its file is being fetched.
+   Sized to the 12px glyph it replaces, so starting a download does not
+   reflow the chip. The reduced-motion law in tokens.base.css strips the
+   rotation and leaves the ring, which still reads as "not idle". */
+.chip-spin {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--s-border-strong);
+  border-top-color: var(--s-accent);
+  animation: chat-spin 900ms linear infinite;
+}
+/* What a tool row opens to: the arguments and a short result, on a pane. */
+.tool-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  font-size: var(--text-meta);
+  color: var(--s-text-2);
+  background: var(--c-tool-bg);
+  border: 1px solid var(--s-border);
+  border-radius: var(--radius-m);
+}
+.tool-result {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tool-result.error {
+  color: var(--s-danger);
+}
+
+/* args view */
+.args-view {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.args-view .arg-row {
+  display: flex;
+  gap: 8px;
+}
+.args-view .arg-key {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--s-text-3);
+}
+.args-view .arg-val {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+}
+
+/* confirmation card: a pending action that needs a yes, in the confirm
+   colour rather than danger - it is a question, not a fault. */
+[data-part="confirm"] {
+  border: 1px solid color-mix(in srgb, var(--c-step-confirm) 40%, var(--s-border));
+  background: var(--c-confirm-bg);
+  border-radius: var(--radius-m);
+  clip-path: var(--clip-panel);
+  padding: 14px 16px;
+  max-width: 34rem;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: var(--text-label);
+}
+.confirm-head {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--s-text);
+}
+.confirm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+}
+.confirm-call {
+  color: var(--s-text-2);
+}
+.confirm-detail {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--s-text-2);
+  background: var(--s-bg-inset);
+  border-radius: var(--radius-s);
+  padding: 8px 10px;
+}
+.confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* buttons (confirm actions, error retry) */
+.btn {
+  padding: 7px 14px;
+  border-radius: var(--radius-s);
+  font-size: var(--text-label);
+  font-weight: 600;
+  transition:
+    background var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--s-accent);
+  color: var(--s-on-accent);
+}
+.btn-primary:not(:disabled):hover {
+  background: var(--s-accent-hover);
+}
+.btn-ghost {
+  border: 1px solid var(--s-border-strong);
+  color: var(--s-text-2);
+}
+.btn-ghost:not(:disabled):hover {
+  background: var(--s-bg-inset);
+}
+
+/* ---------- confirmation dialog (irreversible actions) ----------
+   The prototype skeleton's retired overlay/panel shell, brought back for the
+   one thing it is still the right shape for: a question that must be answered
+   before an action that cannot be undone. Base carries the scrim, the centered
+   panel and a hairline border; elevation is the theme's business (aurora
+   frosts and lifts it, minimal leaves the hairline to do the work). */
+.dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--s-scrim);
+  animation: chat-fade var(--dur-base) var(--ease-standard);
+}
+/* A soft blur under the scrim pushes the page back so the question reads
+   first (the treatment modern chat surfaces use for destructive prompts).
+   Static for the dialog's lifetime - the blur radius is never animated.
+   On a ::before rather than the scrim itself: backdrop-filter makes its
+   element a backdrop root, which silently killed the dialog's own frost in
+   themes that give it one (aurora) - the dialog could only sample the empty
+   scrim, so its blur did nothing and only its fill showed. The fixed scrim
+   is its own stacking context, so the negative-z pseudo paints right after
+   the scrim's dim and before the dialog. */
+.dialog-scrim::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .dialog-scrim::before {
+    backdrop-filter: none;
+  }
+}
+[data-part="confirm-dialog"] {
+  width: min(400px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px 20px;
+  /* Themes may re-point --c-dialog-bg when their raised surface is too
+     translucent for a modal (aurora): text behind a dialog must glow, not
+     read through it. */
+  background: var(--c-dialog-bg, var(--s-bg-raised));
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-l);
+  clip-path: var(--clip-panel);
+  animation: chat-enter var(--dur-base) var(--ease-entrance);
+}
+.dialog-title {
+  font-size: var(--text-title);
+  font-weight: 600;
+  color: var(--s-text);
+}
+.dialog-body {
+  font-size: var(--text-label);
+  line-height: 1.6;
+  color: var(--s-text-2);
+  /* The body can name a file, and an uploaded filename is arbitrary: one long
+     unbroken run would otherwise push past the panel's fixed width. */
+  overflow-wrap: anywhere;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+/* A dialog has room the inline confirm card does not, so its two answers get
+   the full hit target rather than the compact one. */
+.dialog-actions .btn {
+  min-height: 40px;
+}
+/* An input the confirmed action needs (the delete-the-default dialog's
+   successor picker). The select wears the console input's clothes - model
+   tags read in mono there, so they do here too. */
+.dialog-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--text-meta);
+  color: var(--s-text-2);
+}
+.dialog-field select {
+  /* 42px, not the 40px dialog floor: a select computes a shorter intrinsic
+     line than an input, so padding alone lands at 38px - this pins it to the
+     console input's rendered height. */
+  min-height: 42px;
+  background: var(--s-bg-app);
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-m);
+  padding: 9px 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  color: var(--s-text);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast);
+}
+.dialog-field select:focus {
+  outline: none;
+  border-color: var(--s-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--s-accent) 15%, transparent);
+}
+/* Where the engine offers the customizable select (Chromium), the OPEN list
+   joins the design system too - the menu surface the composer's model picker
+   already wears - instead of the OS sheet with its system-accent highlight.
+   Engines without base-select ignore all of this and keep the native popup,
+   which the color-scheme wiring already renders dark.
+
+   SHARED, not dialog-private. Three surfaces wear it now: the delete
+   dialog's select (chat surface), the console's workspace-defaults selects,
+   and the members roster's role select. It lives here rather than being
+   copied into console.css because globals.css loads every theme sheet on
+   every route, so a console page already has this block - a second copy
+   would be two recipes to keep in step, and the one that drifted would be
+   the one nobody was looking at. New surfaces join by adding a selector
+   here, never by restating the recipe. */
+@supports selector(::picker(select)) {
+  .dialog-field select,
+  .dialog-field select::picker(select),
+  .wd-select,
+  .wd-select::picker(select),
+  .mbr-role,
+  .mbr-role::picker(select) {
+    appearance: base-select;
+  }
+  .dialog-field select::picker(select),
+  .wd-select::picker(select),
+  .mbr-role::picker(select) {
+    /* Positioned by the UA against its own implicit anchor, declared area
+       first. Two separate defects landed this rule here, each with its own
+       symptom, and BOTH fixes are load-bearing - neither alone is enough.
+
+       1. WHERE the list appeared. This rule used to set `position-area: none`
+          with `top: anchor(bottom)` / `left: anchor(left)`, and every list
+          rendered at the VIEWPORT ORIGIN. The picker is fixed-position, and
+          aurora frosted the dialog with a backdrop-filter directly on it,
+          which makes an element a containing block for fixed descendants: the
+          `anchor()` insets resolved in viewport coordinates and then applied
+          inside that shifted block, so the two disagreed. Fixed in aurora.css
+          by moving the dialog's frost onto a ::before, which is why the insets
+          are gone from here - the UA anchors it, and that is the one thing
+          ::picker(select) is guaranteed to get right. (It cannot be solved the
+          way the composer's own menu is, with a relative wrapper on the
+          trigger: this list is a UA pseudo-element and nothing can re-parent
+          it.)
+
+       2. WHICH SIDE it opened on, which survived that fix and is the true
+          villain the original inset hack was fighting. Chrome's UA sheet ships
+          `position-try-order: most-block-size` on ::picker(select), which
+          reorders the try list toward whichever side is TALLER regardless of
+          the area declared. Near the dialog's foot that measured 391px above
+          against 296px below, so the list opened upward for no visible reason.
+          Verified on the preview 2026-08-09. */
+    position-area: block-end;
+    position-try-order: normal;
+    position-try-fallbacks: flip-block;
+    min-width: anchor-size(width);
+    max-height: 16rem;
+    overflow-y: auto;
+    /* On the block axis both ways, so the gap survives the flip. */
+    margin-block: 4px;
+    padding: 6px;
+    /* A picker's OWN fill first, and the reason is a trap the dialog was
+       hiding. A top-layer picker can carry no ::before, so it can carry no
+       frost - and a theme whose --c-dialog-bg is GLASS (aurora's is
+       --a-glass-fill-floating) reads straight through to the page behind it.
+       Inside the dialog that never showed, because the dialog's own ::before
+       frost sat underneath; the moment a picker opened anywhere else, the page
+       text read through the option rows.
+
+       So a theme that frosts declares --c-picker-bg as a SOLID fill and this
+       takes it. The two fallbacks behind it are unchanged and still correct
+       for a theme that declares neither: a flat theme's --c-dialog-bg is
+       already solid, and --s-bg-raised is the floor (minimal's one gray ramp,
+       correct in both of its modes). The color is restated rather than left
+       to inherit through the picker's top-layer box: an option row's
+       legibility is the whole point of the block, and it should not rest on
+       which element the cascade walks. */
+    color: var(--s-text);
+    background: var(--c-picker-bg, var(--c-dialog-bg, var(--s-bg-raised)));
+    border: 1px solid var(--s-border-strong);
+    border-radius: var(--radius-m);
+    box-shadow: 0 12px 32px var(--s-shadow);
+    clip-path: var(--clip-panel);
+  }
+  /* NO author display on the picker, ever: the closed picker is hidden only
+     by the UA's plain display:none, which any author display overrides - so
+     an unconditional display renders the list even while shut, dim inside the
+     dialog. The UA's own open state brings the display back; the row rhythm a
+     flex gap would have given comes from the sibling margin instead, which
+     leaves nothing here for the open/shut cycle to fight over. */
+  .dialog-field option + option,
+  .wd-select option + option,
+  .mbr-role option + option {
+    margin-top: 2px;
+  }
+  /* The checked row is marked by the accent bar, as in every menu here - the
+     UA's checkmark glyph would say the same thing twice. */
+  .dialog-field option::checkmark,
+  .wd-select option::checkmark,
+  .mbr-role option::checkmark {
+    display: none;
+  }
+  .dialog-field option,
+  .wd-select option,
+  .mbr-role option {
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    padding: 7px 10px;
+    border-radius: var(--radius-s);
+    /* Restated per row for the same reason as the box above: the defaults
+       page's options are sentences, not tags, and a row that inherited a
+       theme's inverse text would be invisible on its own surface. */
+    color: var(--s-text);
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-standard);
+  }
+  .dialog-field option:hover,
+  .dialog-field option:focus-visible,
+  .wd-select option:hover,
+  .wd-select option:focus-visible,
+  .mbr-role option:hover,
+  .mbr-role option:focus-visible {
+    background: var(--s-bg-inset);
+    outline: none;
+  }
+  .dialog-field option:checked,
+  .wd-select option:checked,
+  .mbr-role option:checked {
+    background: color-mix(in srgb, var(--s-accent) 8%, transparent);
+    box-shadow: inset 2px 0 0 var(--s-accent);
+  }
+  /* A row that names a STATE rather than an option - the defaults page's
+     "Custom" ceiling. It still has to READ, because it is the answer whenever
+     it is the selected one, so it takes the muted text tier rather than a
+     fade, and drops the pointer that would promise a click it cannot honour.
+     Only the base-select half needs saying: under the native popup the UA
+     greys a disabled row itself. */
+  .dialog-field option:disabled,
+  .wd-select option:disabled,
+  .mbr-role option:disabled {
+    color: var(--s-text-2);
+    cursor: default;
+  }
+}
+
+/* What the CURRENTLY selected option means, under the picker that selects it.
+   Reads at the same weight as the body rather than as fine print: a word like
+   "agentic" is not self-explanatory, and this is the only place a person is
+   told what they are about to permit. Quiet colour, full line-height - it is
+   an explanation, not a warning, and the dialog reserves its one warn slot for
+   the caution below. */
+.dialog-hint {
+  font-size: var(--text-meta);
+  line-height: 1.55;
+  color: var(--s-text-3);
+  overflow-wrap: anywhere;
+}
+/* The dialog's ONE warn line, per the console's warn-slot-per-subject rule -
+   in a dialog the subject is the decision, so there is exactly one of these.
+   It carries what the action will COST or why the current state is what it is,
+   never a restatement of the body in a louder colour.
+
+   Tinted by a left rule and a wash rather than by colouring the text: a full
+   paragraph in the warn hue measures worse than the state it is warning about,
+   and the wording carries the meaning without it. */
+.dialog-caution {
+  font-size: var(--text-meta);
+  line-height: 1.55;
+  color: var(--s-text-2);
+  border-left: 2px solid var(--s-warn);
+  background: color-mix(in srgb, var(--s-warn) 7%, transparent);
+  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- turn actions: the row that closes a turn ----------
+   A quiet footer, not a toolbar: three icon verbs then the figures in small
+   mono under a reply; edit, reply and copy under a question's right edge.
+   Shown at rest only on the latest reply; older ones reveal it when pointed
+   at or focused into, and a verb taken from a row holds it open a moment
+   (data-hold) so the copied tick is seen before the row fades.
+
+   Revealed by OPACITY, never by mounting: the buttons keep their box, so a
+   hover cannot reflow the turn, and they stay in the tab order. Where there
+   is no hover at all the row simply stays. */
+[data-part="turn-actions"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin-left: -6px;
+  font-size: var(--text-meta);
+  color: var(--s-text-3);
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-standard);
+}
+/* A question's row hangs off the same edge its bubble does. */
+[data-part="turn-actions"][data-align="end"] {
+  align-self: flex-end;
+  margin-left: 0;
+  margin-right: -6px;
+}
+.turn:hover [data-part="turn-actions"],
+.turn:has(:focus-visible) [data-part="turn-actions"],
+.turn[data-hold] [data-part="turn-actions"],
+.turn[data-latest] [data-part="turn-actions"] {
+  opacity: 1;
+}
+@media (hover: none) {
+  [data-part="turn-actions"] {
+    opacity: 0.8;
+  }
+}
+/* The figures: which model answered, what it wrote, how fast. */
+.turn-meta {
+  display: inline-flex;
+  gap: 12px;
+  margin-left: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  color: var(--s-text-3);
+}
+.meta-model {
+  color: var(--s-text-2);
+}
+.meta-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- quoting: the chip, and the affordance that fills it ----------
+   One shape on two surfaces. In the composer it is the pending quote and
+   carries a dismiss; on a sent question it is the record of what was replied
+   to and carries nothing. Quiet either way: it is a pointer at something
+   already on screen, not a second message, so it reads as one clipped line
+   under a rule rather than a block of quoted text competing with the answer. */
+[data-part="quote-chip"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: var(--radius-s);
+  background: var(--c-quote-bg);
+  font-size: var(--text-meta);
+  color: var(--s-text-2);
+}
+/* On a sent question the chip rides inside the bubble as a band at its top,
+   inset 6px from the bubble's edges: the strip the composer shows while the
+   reply is pending, carried over, so a question keeps the shape it was
+   written in and there is one bubble. A second bubble stacked on the first
+   (tried) read as two objects however the corners were cut. */
+[data-part="bubble-user"] > [data-part="quote-chip"] {
+  margin: -5px -10px 8px;
+  /* The band reaches the bubble's inset on both sides (its cap would be the
+     content box). The width a quote can force on the bubble stops at 28rem,
+     seven tenths of the measure: a tiny question under a long quote gets a
+     bubble that wide, not the full 40rem; a short quote keeps the bubble
+     compact; a long question still widens the bubble and the band stretches
+     with it; on a phone the column is narrower than the cap, so the column
+     wins.
+     The cap is NOT a max-width on the band: the bubble shrinks to fit, and
+     while it measures its content a percentage max-width on a child counts
+     as none, so the passage would still push the bubble to the measure and
+     the band would be capped only afterwards. Instead the passage gives up
+     its own width (contain, below) and a hidden, zero-height copy of it on
+     a row of its own (the spacer) asks for the passage's width under a
+     plain cap, which the shrink-to-fit honours. A grid, not a wrapped flex
+     row: the spacer spans both columns, so it never shares a line with the
+     mark, and on a phone its own width (overflow hidden, so no automatic
+     minimum) is not forced on the column the passage fills. */
+  max-width: calc(100% + 20px);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  row-gap: 0;
+}
+[data-part="bubble-user"] > [data-part="quote-chip"]::before {
+  content: attr(data-text);
+  grid-column: 1 / -1;
+  height: 0;
+  min-width: 0;
+  /* The spacer spans the mark's column and the gap after it, so it carries
+     them as padding: the passage's column then measures exactly the
+     passage's own line, and a short quote sits on one line. */
+  padding-left: 10px;
+  /* 28rem for the bubble less its 16px padding either side; the band's
+     -10px margins and 10px padding cancel. */
+  max-width: calc(28rem - 32px);
+  overflow: hidden;
+  visibility: hidden;
+  white-space: nowrap;
+}
+/* Two lines before the clip, not one: at the narrower width they carry
+   more of the passage than one line at the full measure did. The composer's
+   pending chip keeps its single line - a reminder, not a reading. */
+[data-part="bubble-user"] > [data-part="quote-chip"] > .quote-text {
+  contain: inline-size;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+/* The band as the way back to its source. A question's quote is a button
+   while the message it came from is in the thread: it glides the thread
+   there and lights the passage where its words are found in the rendered
+   answer (or rings the turn), and the jump floater then offers
+   the way back down (useQuoteJump). The pointer deepens the tint and lights
+   the mark; the press deepens it further. Greyed, with the reason as its
+   tooltip, when the source is gone (edited away, replaced, or quoted before
+   it had an id): a dead link that looked live would be worse than none. */
+button[data-part="quote-chip"] {
+  position: relative;
+  width: calc(100% + 20px);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard);
+}
+button[data-part="quote-chip"] > .quote-mark {
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+/* The band is a 33px strip; its press reaches 4px above and below, to the
+   40px floor, the way the action buttons' does (::before is the spacer). */
+button[data-part="quote-chip"]::after {
+  content: "";
+  position: absolute;
+  inset: -4px 0;
+}
+button[data-part="quote-chip"]:hover {
+  background: var(--c-quote-bg-hover);
+  color: var(--s-text);
+}
+button[data-part="quote-chip"]:hover > .quote-mark {
+  background: var(--s-accent-hover);
+}
+button[data-part="quote-chip"]:active {
+  background: var(--c-quote-bg-active);
+}
+button[data-part="quote-chip"]:focus-visible {
+  outline: 2px solid var(--s-accent);
+  outline-offset: -2px;
+}
+[data-part="quote-chip"][data-dead="true"] {
+  /* The words stay readable - they are content, not meta - and what goes is
+     the accent: the mark greys and the tint drops to the bubble's own
+     ground, which is what a link that leads nowhere has lost. Greyed text
+     on a still-tinted pane read as a disabled control instead. */
+  background: var(--c-bubble-user-bg);
+  cursor: default;
+}
+[data-part="quote-chip"][data-dead="true"] > .quote-mark {
+  background: var(--s-text-3);
+}
+/* ---------- the landed-on turn ----------
+   A turn the thread glided to wears a cue for the lit span (LIT_MS in
+   hooks/use-quote-jump.ts; the keyframes below run that long, and the
+   attribute goes as they end), then lets go. One cue per thing referred to:
+   - the words: lit by lib/passage-highlight.ts on the words themselves,
+     frame by frame on a highlight rule it owns, and the turn wears nothing
+     else - a ring around a tall answer next to its lit words says the same
+     thing twice;
+   - the whole answer (the Reply verb, or a selection of all of a plain
+     one): a wash that arrives from the top of the prose and settles over
+     it, every segment of the turn's rail (the thinking and tool rows' too:
+     the turn is what the answer is the end of) taking the accent as it
+     lands - the extent of the message, shown by passing over it, and a
+     glow travelling down the rail with the wash's front (the accent at its
+     core over the segment, revealed by the same mask on the same clock) so
+     the rail lights as the light reaches it, holds and leaves with it. The
+     wash is light from the rail, a lit pane like the theme's others: fullest
+     beside the rail and thinning across the measure, with the pane edge
+     the theme draws (--lit-under) over it; laid flat and even, it read as
+     a tint on the pane rather than light on it. A question quoted whole
+     has no prose: it wears the ring and the glow;
+   - a place (the question being returned to; an answer whose quoted words
+     could not be found - edited since, or quoted as its raw markdown): a
+     ring, an outline so the pane's own edge light stays, in the accent at
+     half strength (at full it is the focus ring's drawing), rising and
+     falling on the sweep's clock. The question's
+     ring swells once as a glow around the bubble, on the sweep's clock so
+     the two landings share one rhythm (a second beat read as a flicker
+     beside the steady outline), and the outline rises and falls with it
+     in the same keyframes (held for the span while the glow had left, it
+     read as a second state): the way back lands where the reader was, and
+     a bare outline on a tinted pane read as flat.
+   A reply's prose gets a radius for the ring and the wash to follow. Every
+   change eases in and out; under reduced motion the base sheet's law makes
+   the ring, the wash and the rail's light cuts. */
+.turn [data-part="bubble-user"],
+.turn [data-part="content"] {
+  outline: 2px solid transparent;
+  outline-offset: 3px;
+  transition: outline-color var(--dur-slow) var(--ease-standard);
+}
+/* A landed-on turn takes focus (so Tab goes on from there); the light, the
+   sweep or the ring is its cue, not a second outline around the whole turn. */
+.turn:focus {
+  outline: none;
+}
+.turn [data-part="content"] {
+  border-radius: var(--radius-s);
+}
+.turn[data-lit] [data-part="bubble-user"],
+.turn[data-lit="ring"] [data-part="content"] {
+  outline-color: color-mix(in srgb, var(--s-accent) 55%, transparent);
+}
+/* The answer's ring rises and falls on the sweep's clock; the rule above
+   holds it under reduced motion, where the keyframes are gone. */
+.turn[data-lit="ring"] [data-part="content"] {
+  animation: lit-ring 1800ms var(--ease-standard) both;
+}
+@keyframes lit-ring {
+  0%,
+  100% {
+    outline-color: transparent;
+  }
+  22%,
+  72% {
+    outline-color: color-mix(in srgb, var(--s-accent) 55%, transparent);
+  }
+}
+/* The glow lies over the bubble's own edge light (--lit-under, set by a
+   theme that draws one) rather than replacing it for the span. The ring
+   goes with it on the same clock; the rule above holds the ring under
+   reduced motion. */
+.turn[data-lit] [data-part="bubble-user"] {
+  animation: lit-glow 1800ms var(--ease-standard) both;
+}
+@keyframes lit-glow {
+  0%,
+  100% {
+    outline-color: transparent;
+    box-shadow: var(--lit-under, 0 0 0 0 transparent), 0 0 0 0 transparent, 0 0 0 0 transparent;
+  }
+  22%,
+  72% {
+    outline-color: color-mix(in srgb, var(--s-accent) 55%, transparent);
+    box-shadow:
+      var(--lit-under, 0 0 0 0 transparent),
+      0 0 0 5px color-mix(in srgb, var(--s-accent) 14%, transparent),
+      0 0 28px color-mix(in srgb, var(--s-accent) 34%, transparent);
+  }
+}
+/* The wash lies under the prose: the answer is a stacking context for the
+   span, so a layer of its own can sit beneath its text and still over the
+   pane. An answer with a citation card open is one already, lifted to 1 by
+   its own rule below, and this one stands aside for it - at 0 the card
+   would paint under the next turn again. */
+.turn[data-lit="whole"] [data-part="content"]:not(:has(.citation-popover)) {
+  position: relative;
+  z-index: 0;
+}
+.turn[data-lit="whole"] [data-part="content"]::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -6px -10px;
+  border-radius: var(--radius-s);
+  /* Light from the rail: fullest beside it, falling to half within the
+     first fifth and to almost nothing at the far edge (an even ramp left
+     the tail a grey tint, neither light nor sky), tilted a little down the
+     prose; the theme's pane edge over it bounds the far end. */
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--c-passage-light) 84%, transparent),
+    color-mix(in srgb, var(--c-passage-light) 50%, transparent) 22%,
+    color-mix(in srgb, var(--c-passage-light) 24%, transparent) 55%,
+    color-mix(in srgb, var(--c-passage-light) 6%, transparent)
+  );
+  box-shadow: var(--lit-under, none);
+  pointer-events: none;
+  /* The mask is three answers tall - a solid third, a soft edge, a clear
+     half - and slides up through the box: the clear part first, then the
+     edge passing down the prose, then the solid third at rest. */
+  mask-image: linear-gradient(to bottom, #000 33%, transparent 50%);
+  mask-size: 100% 300%;
+  mask-repeat: no-repeat;
+  animation: lit-sweep 1800ms var(--ease-standard) both;
+}
+@keyframes lit-sweep {
+  0% {
+    mask-position: 0 100%;
+    opacity: 1;
+  }
+  38%,
+  72% {
+    mask-position: 0 0;
+    opacity: 1;
+  }
+  100% {
+    mask-position: 0 0;
+    opacity: 0;
+  }
+}
+/* The rail's light: the ring's bloom laid along the rail - a 30px band
+   centred on each segment with the ring's shoulder, at half the ring's
+   strength (26% at the centre, 9% at 5px, 4% at 10px, gone by 15px: at
+   the ring's 42% beside a lit line it read as harsh; at 22px with the
+   shoulder at 4px it read as a thickened line, not a glow), over the
+   segment (z-index 1), with the accent as a 1px core drawn by the stops
+   the segment's own mask uses, so the two share a pixel column. The band's
+   ends fade over 12px (a hard end beside a glyph read as a cut), by a
+   second mask layer under the travelling one, so the band has keyframes of
+   its own on the sweep's clock. The travel is ONE front down the whole
+   rail, the glyphs passed over: the hook measures the prose (--rail-h on
+   the turn) and each segment's offset under the prose's top (--seg-top on
+   its glyph), and every segment's travelling mask is the prose's, thirty
+   proses tall (its solid part reaching the rows above, however many: a
+   short answer under a long run of tool rows) and
+   slid by that offset, so the front passes a segment where the wash's
+   front passes the prose beside it (each segment travelling its own height
+   lit the rows above and the prose as two trips). The band reaches into
+   the wash's inset at a phone's width, never the prose; wider than 30px it
+   would. Under reduced motion it is a steady cut, like the wash. The
+   segment keeps its own grey under the core, in every state: lit on its
+   own it ran past the band's fading ends to the glyphs as hard stubs. */
+.turn[data-lit="whole"] .step-glyph::before {
+  content: "";
+  z-index: 1;
+  width: 30px;
+  margin-left: -15px;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      to right,
+      transparent 50%,
+      var(--s-accent) 50%,
+      var(--s-accent) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    ),
+    linear-gradient(
+      to right,
+      transparent,
+      color-mix(in srgb, var(--s-accent) 4%, transparent) 18%,
+      color-mix(in srgb, var(--s-accent) 9%, transparent) 32%,
+      color-mix(in srgb, var(--s-accent) 26%, transparent) 50%,
+      color-mix(in srgb, var(--s-accent) 9%, transparent) 68%,
+      color-mix(in srgb, var(--s-accent) 4%, transparent) 82%,
+      transparent
+    );
+  animation: lit-rail-light 1800ms var(--ease-standard) both;
+  mask-image:
+    linear-gradient(to bottom, #000 93.3333%, transparent 95%),
+    linear-gradient(to bottom, transparent, #000 12px, #000 calc(100% - 12px), transparent);
+  mask-size:
+    100% calc(var(--rail-h, 600px) * 30),
+    100% 100%;
+  mask-repeat: no-repeat;
+  mask-composite: intersect;
+}
+/* The edge (solid to clear over half a prose, like the wash's) starts a
+   prose above the prose's top and ends a prose below its bottom, as the
+   wash's does; in a segment's own box that is the prose's travel slid up
+   by the segment's offset. */
+@keyframes lit-rail-light {
+  0% {
+    mask-position:
+      0 calc(-29 * var(--rail-h, 600px) - var(--seg-top, 0px)),
+      0 0;
+    opacity: 1;
+  }
+  38%,
+  72% {
+    mask-position:
+      0 calc(-27 * var(--rail-h, 600px) - var(--seg-top, 0px)),
+      0 0;
+    opacity: 1;
+  }
+  100% {
+    mask-position:
+      0 calc(-27 * var(--rail-h, 600px) - var(--seg-top, 0px)),
+      0 0;
+    opacity: 0;
+  }
+}
+/* The quotation rule, drawn rather than typed: a literal quote glyph would be
+   read out by a screen reader as content of the passage. */
+.quote-mark {
+  flex-shrink: 0;
+  align-self: stretch;
+  width: 2px;
+  min-height: 1em;
+  border-radius: 1px;
+  background: var(--s-accent);
+}
+.quote-text {
+  min-width: 0;
+  flex: 1;
+  /* One line, clipped: the passage may be a whole paragraph, and the chip's job
+     is to say WHICH passage, not to reproduce it. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.quote-dismiss {
+  flex-shrink: 0;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: var(--radius-s);
+  color: var(--s-text-3);
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+/* The painted glyph is small chrome; the 40px hit floor is not optional, so the
+   interactive box is extended invisibly past it (the same idiom .turn-action
+   uses). The glyph's box is 16px square, so 12px on every side reaches 40. */
+.quote-dismiss::after {
+  content: "";
+  position: absolute;
+  inset: -12px;
+}
+.quote-dismiss:hover {
+  color: var(--s-text);
+}
+
+/* The floating "Quote" button over a text selection. Fixed to the viewport (the
+   component positions it from the selection's rect) so no bubble's overflow can
+   clip it, and dismissed on any scroll - it would otherwise point at the wrong
+   words. */
+[data-part="selection-quote"] {
+  position: fixed;
+  z-index: 40;
+  /* Centred over the selection's START (the component anchors x there), one
+     step above the line it begins on. */
+  transform: translate(-50%, calc(-100% - 10px));
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: var(--radius-m);
+  border: 1px solid var(--s-border-strong);
+  /* Themes may re-point --c-menu-bg when their raised surface is too
+     translucent to float over text (aurora); this is the same kind of surface,
+     so it follows the same pointer. */
+  background: var(--c-menu-bg, var(--s-bg-raised));
+  color: var(--s-text);
+  box-shadow: 0 8px 24px var(--s-shadow);
+  /* The segmented children square their shared inner corners themselves. */
+  overflow: hidden;
+  animation: chat-fade var(--dur-fast) var(--ease-standard);
+}
+/* A selection starting at the top of the viewport leaves no room above its
+   first line, so the component flips the group BELOW it (see the layout
+   effect); the -100% lift comes off with the flip. */
+[data-part="selection-quote"][data-flip] {
+  transform: translate(-50%, 0);
+}
+.selection-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  /* Painted at the hit floor outright: this group exists to be FOUND, unlike
+     the at-rest action row, so it earns dialog-button scale rather than the
+     ::after trick. */
+  min-height: 40px;
+  padding: 0 14px;
+  border: none;
+  background: none;
+  color: inherit;
+  font-size: var(--text-label);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+}
+.selection-action + .selection-action {
+  border-left: 1px solid var(--s-border);
+}
+.selection-action:hover {
+  background: color-mix(in srgb, var(--s-accent) 12%, transparent);
+  color: var(--s-accent);
+}
+/* The container's overflow:hidden (needed for the squared segment corners)
+   clips a ring drawn OUTSIDE the button, so this one draws inward - the same
+   move .convo-action and .convo-rename make. */
+.selection-action:focus-visible {
+  outline-offset: -2px;
+}
+.selection-action[data-copied] {
+  color: var(--s-accent);
+}
+
+/* ---------- the inline question editor ----------
+   The bubble, swapped for a box to rewrite it in. It keeps the bubble's own
+   footprint and alignment so the turn does not jump when it opens, and it is a
+   panel rather than a bubble because it now holds controls as well as words. */
+[data-part="message-editor"] {
+  align-self: flex-end;
+  width: min(100%, 42rem);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-bubble);
+  border: 1px solid var(--s-accent);
+  background: var(--s-bg-raised);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--s-accent) 15%, transparent);
+}
+.message-editor-input {
+  border: none;
+  background: none;
+  resize: none;
+  font: inherit;
+  line-height: 1.6;
+  color: var(--s-text);
+  outline: none;
+  min-height: 24px;
+  /* Auto-grown in JS like the composer; this caps it and turns on the inner
+     scrollbar past the cap. */
+  max-height: var(--composer-max-h);
+  overflow-y: auto;
+}
+.message-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.message-editor-actions .btn {
+  /* The dossier's hit-target floor; matches .dialog-actions .btn. */
+  min-height: 40px;
+}
+
+/* citations */
+[data-part="citations"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* The chip's popover anchor. Flex items are blockified regardless of this
+   rule's own display value; align-self opts out of the row's default stretch
+   so the wrapper's height tracks its own chip rather than the row's tallest
+   sibling, keeping the popover's "just below the chip" gap consistent. */
+.citation-chip-wrap {
+  position: relative;
+  align-self: flex-start;
+}
+.cite-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  min-height: 28px;
+  font-size: var(--text-meta);
+  padding: 0 10px 0 5px;
+  background: var(--c-citation-bg);
+  border: 1px solid var(--s-border);
+  border-radius: var(--radius-s);
+  color: var(--s-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: border-color var(--dur-fast) var(--ease-standard), color var(--dur-fast);
+}
+/* The chip is 28px against the 40px hit floor; the hit area reaches it. */
+.cite-chip::after {
+  content: "";
+  position: absolute;
+  inset: -6px 0;
+}
+/* A chip with no url (records / mcp_records / upload) is a <button> - see
+   CitationChip - so its click can pin the popover open. Reset the button
+   chrome the browser would otherwise add back on top of the shape above. */
+button.cite-chip {
+  font: inherit;
+  font-size: var(--text-meta);
+  text-align: left;
+  cursor: pointer;
+}
+.cite-chip:hover,
+.cite-chip[data-highlighted="true"] {
+  border-color: var(--s-accent);
+  color: var(--s-text);
+}
+/* The reverse-highlight fill: a second channel alongside the border/text
+   color shift above, so the cross-highlight from a hovered marker still
+   reads without relying on hue alone. */
+.cite-chip[data-highlighted="true"] {
+  background: color-mix(in srgb, var(--s-accent) 10%, var(--c-citation-bg));
+}
+a.cite-chip:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+/* The number is a small tinted box, the marker's own shape. */
+.cite-chip b {
+  min-width: 18px;
+  line-height: 18px;
+  text-align: center;
+  font-size: var(--text-micro);
+  font-weight: 600;
+  color: var(--s-accent);
+  background: color-mix(in srgb, var(--s-accent) 14%, transparent);
+  border-radius: 4px;
+}
+
+/* citation popover - the one card a marker or a chip opens (CitationPopoverCard).
+   Same floating-panel shape as .model-menu/.context-pop: background/backdrop/
+   border/shadow all come from the shared menu tokens, so aurora's frosted glass
+   and minimal's flat hairline both apply with no theme-specific rule here. */
+.citation-popover {
+  /* The card is chrome, not the answer: the UI face at the label size,
+     whatever face the column it sits in reads in. */
+  font-family: var(--font-ui);
+  font-size: var(--text-label);
+  line-height: 1.5;
+  position: absolute;
+  /* Above the trigger: the lines above a marker have been read, the lines
+     below are next. It grows from the corner nearest the trigger. */
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 40;
+  transform-origin: 20% 100%;
+  width: max-content;
+  min-width: 14rem;
+  max-width: min(340px, calc(100vw - 2rem));
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--c-menu-bg, var(--s-bg-raised));
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-m);
+  box-shadow: 0 12px 32px var(--s-shadow);
+  clip-path: var(--clip-panel);
+  animation: chat-enter var(--dur-base) var(--ease-entrance);
+}
+/* Placement decides at open time (usePopoverPlacement): a trigger near the
+   pane's top edge opens downward instead of running off it. */
+.citation-popover[data-flip="down"] {
+  bottom: auto;
+  top: calc(100% + 8px);
+  transform-origin: 20% 0;
+}
+/* A theme that puts a filter on the answer box (aurora's frost) makes it a
+   stacking context, trapping the popover's z-index inside: the box and its
+   later siblings (the honesty notice, the next turn's bubble - themselves
+   stacking contexts under the same themes) then paint in DOM order, and the
+   later sibling covers the open card. Elevating the box only while it hosts
+   a popover lifts the whole context past those level-0 neighbors; 1, not 40,
+   so pane chrome (jump-to-latest, dialogs) still paints above. */
+[data-part="content"]:has(.citation-popover) {
+  position: relative;
+  z-index: 1;
+}
+.citation-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+}
+.citation-entry + .citation-entry {
+  border-top: 1px solid var(--s-border);
+}
+.citation-entry-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--s-text-3);
+}
+.citation-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+.citation-entry-type {
+  font-size: var(--text-micro);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.citation-entry-index {
+  margin-left: auto;
+  color: var(--s-accent);
+  font-size: var(--text-micro);
+}
+.citation-entry-label {
+  font-size: var(--text-label);
+  font-weight: 600;
+  color: var(--s-text);
+  overflow-wrap: anywhere;
+}
+.citation-entry-snippet {
+  font-size: var(--text-meta);
+  color: var(--s-text-2);
+  line-height: 1.5;
+  /* Long retrieved passages stay a preview, not a wall of text: clipped to a
+     few lines with an honest ellipsis rather than growing the popover to fit
+     whatever a chunk happened to hold. */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.citation-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  margin-top: 2px;
+  font-size: var(--text-meta);
+  font-weight: 600;
+  color: var(--s-accent);
+}
+.citation-action:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.citation-action-icon {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+}
+
+/* honesty notice: a standing line in the closing row, not a toast */
+[data-part="notice"] {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--s-text-3);
+  max-width: 62ch;
+}
+[data-part="notice"] svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--s-info);
+}
+
+/* interrupted marker */
+.interrupted-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-meta);
+  color: var(--s-text-3);
+  border: 1px solid var(--s-border);
+  border-radius: 99px;
+  padding: 2px 10px;
+}
+.interrupted-chip::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--s-text-3);
+}
+
+/* waiting row: "Sending to <model>", or "Waiting for <model> to load" */
+.wait-row {
+  display: flex;
+  align-items: center;
+  min-height: 20px;
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+}
+
+/* matrix loader: sixteen 2px dots, one shared pulse, a per-dot delay (the
+   component sets --d). The colour rides --mx. */
+.t-matrix {
+  display: grid;
+  grid-template-columns: repeat(4, 2px);
+  grid-auto-rows: 2px;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.step-glyph .t-matrix {
+  margin-top: calc((var(--row-lh) - 14px) / 2);
+  align-self: flex-start;
+}
+.t-matrix i {
+  display: block;
+  background: color-mix(in srgb, var(--mx, var(--s-text-3)) 30%, transparent);
+  animation: chat-matrix 1200ms ease-in-out infinite;
+  animation-delay: calc(var(--d, 0) * 1ms);
+}
+@keyframes chat-matrix {
+  0%,
+  45%,
+  100% {
+    background-color: color-mix(in srgb, var(--mx, var(--s-text-3)) 30%, transparent);
+  }
+  15% {
+    background-color: var(--mx, var(--s-text));
+  }
+}
+
+/* streaming: a changed line fades in; a caret marks the text edge */
+.tok {
+  animation: chat-tok 160ms var(--ease-standard) both;
+}
+@keyframes chat-tok {
+  from {
+    opacity: 0;
+  }
+}
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 3px;
+  vertical-align: -0.16em;
+  background: var(--s-accent);
+  border-radius: 1px;
+  animation: chat-caret 1s steps(1) infinite;
+}
+
+/* error: no box. In the thread the danger is on the rail's glyph and in the
+   sky's wash; under the empty pane's greeting it is the glyph beside the
+   sentence. A quieter second line says what did and did not happen. */
+[data-part="error"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 13.5px;
+  color: var(--s-text);
+}
+[data-part="error"] .err-glyph {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--s-danger);
+}
+.step[data-kind="error"] [data-part="error"] .err-glyph {
+  display: none;
+}
+[data-part="error"] small {
+  flex-basis: 100%;
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+}
+/* The model server holds nothing this deployment can chat with. A FIRST-RUN
+   state, not a fault, so it deliberately declines the error note's danger
+   tint: nothing is broken, and painting a setup step red reads as a bug in
+   the app rather than a step not yet taken. It carries the action that
+   resolves it, because a notice that names a fix and then makes the reader go
+   find it is only half a notice. */
+[data-part="no-chat-model"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  /* The empty pane centers its children; this stays a left-read block in both
+     places it can land, and is centered as a whole by whichever holds it. */
+  text-align: left;
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-m);
+  background: var(--s-bg-inset);
+  padding: 14px 16px;
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+}
+[data-part="no-chat-model"] p {
+  /* The console's prose measure, so the sentence breaks where it reads. */
+  max-width: 46ch;
+}
+/* .btn draws at ~30px; the dossier's hit-target floor is 40. */
+.no-chat-model-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+/* ---------- composer ---------- */
+[data-part="composer"] {
+  flex-shrink: 0;
+  padding: 8px 20px 18px;
+  position: relative;
+}
+/* The prototype's narrow inset: a 370px pane on a 390px screen. Beside the
+   base rule because it shares its specificity and must come after it. */
+@media (max-width: 767px) {
+  [data-part="composer"] {
+    padding: 0 10px 10px;
+  }
+}
+
+/* jump-to-latest: a floating round button above the composer, shown only when
+   scrolled up (data-visible). Kept mounted so it fades in AND out; the base
+   sheet's reduced-motion blanket collapses the transition to instant. */
+[data-part="jump-to-latest"] {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 40px meets the DESIGN.md hit-target floor (this control is net-new, with
+     no prototype to inherit a smaller size from). */
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--s-bg-raised);
+  border: 1px solid var(--s-border-strong);
+  color: var(--s-text-2);
+  box-shadow: 0 6px 20px var(--s-shadow);
+  opacity: 0;
+  transform: translate(-50%, calc(-100% + 6px)) scale(0.92);
+  pointer-events: none;
+  transition:
+    opacity var(--dur-base) var(--ease-standard),
+    transform var(--dur-base) var(--ease-standard),
+    background var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+}
+[data-part="jump-to-latest"][data-visible="true"] {
+  opacity: 1;
+  transform: translate(-50%, calc(-100% - 8px)) scale(1);
+  pointer-events: auto;
+}
+[data-part="jump-to-latest"]:hover {
+  color: var(--s-text);
+  border-color: var(--s-accent);
+}
+/* Two glyphs, crossfaded in place: the way down to the end, and the way
+   back to the question whose quote was followed (data-return). */
+[data-part="jump-to-latest"] .jl-glyph {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  transition:
+    opacity var(--dur-base) var(--ease-standard),
+    transform var(--dur-base) var(--ease-standard);
+}
+[data-part="jump-to-latest"] .jl-back {
+  opacity: 0;
+  transform: translateY(4px);
+}
+[data-part="jump-to-latest"][data-return="true"] .jl-down {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+[data-part="jump-to-latest"][data-return="true"] .jl-back {
+  opacity: 1;
+  transform: none;
+}
+/* A dot marks that something arrived while the reader was away. */
+[data-part="jump-to-latest"] i {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--s-accent);
+  border: 2px solid var(--s-bg-app);
+  transform: scale(0);
+  transition: transform var(--dur-base) var(--ease-entrance);
+}
+[data-part="jump-to-latest"][data-new="true"] i {
+  transform: none;
+}
+/* model notice: docked to the composer, in the layout, never over the
+   thread (ComposerNotice). A grid track from 0fr to 1fr, so it opens as a
+   row and the composer slides down under it. */
+[data-part="composer-notice"] {
+  max-width: var(--col);
+  margin: 0 auto;
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  /* Closed, it leaves the accessibility tree too (a status that is not
+     shown must not be announced), once the track has collapsed. */
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--dur-slow) var(--ease-entrance),
+    opacity var(--dur-base) var(--ease-standard),
+    visibility 0s var(--dur-slow);
+}
+[data-part="composer-notice"][data-open] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+[data-part="composer-notice"] > div {
+  overflow: hidden;
+  min-height: 0;
+}
+.cn-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 12px;
+  padding: 10px 8px 10px 14px;
+  background: var(--c-card-bg);
+  border: 1px solid var(--s-border-strong);
+  border-bottom: none;
+  border-radius: var(--radius-m) var(--radius-m) 0 0;
+  font-size: var(--text-label);
+}
+.cn-box .t-matrix {
+  margin-top: 5px;
+}
+.cn-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--s-text-2);
+}
+.cn-text b {
+  display: block;
+  color: var(--s-text);
+  font-weight: 600;
+}
+.cn-close {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-s);
+  color: var(--s-text-3);
+}
+.cn-close::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+.cn-close:hover {
+  color: var(--s-text);
+  background: var(--c-tool-bg);
+}
+.cn-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.composer-box {
+  position: relative;
+  max-width: var(--col);
+  margin: 0 auto;
+  background: var(--c-composer-bg, var(--s-bg-raised));
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-l);
+  padding: 12px 12px 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition:
+    border-color var(--dur-fast) var(--ease-standard),
+    box-shadow var(--dur-fast) var(--ease-standard);
+}
+/* One clean focus treatment for the whole composer (the owner-reported
+   "funky" state was the textarea and box fighting for the ring): the
+   textarea suppresses its own outline and the box carries a single ring. */
+.composer-box:focus-within {
+  border-color: color-mix(in srgb, var(--s-accent) 70%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--s-accent) 14%, transparent);
+}
+.composer-box[data-drag="true"] {
+  border-color: var(--s-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--s-accent) 22%, transparent);
+}
+/* The composer's editable surface. It renders list markers, task boxes and code
+   blocks as glyphs while they are typed, on the SAME token recipes the answer
+   side uses for the rendered message - so a checklist looks the same in the box
+   it is written in as in the message it becomes. */
+.composer-editor {
+  position: relative;
+}
+/* An honesty notice raised BEFORE the message is sent - today, that a staged
+   image cannot be read by the pinned model. Warn-toned by a left rule and a
+   wash, never by colouring the sentence: it sits inside the composer, where a
+   paragraph in the warn hue would compete with the text being typed, and the
+   wording carries the meaning on its own.
+
+   One per subject, per the console's warn-slot rule: the composer's subject is
+   the message about to be sent, so this is the only such line here. */
+.composer-notice {
+  font-size: var(--text-meta);
+  line-height: 1.5;
+  color: var(--s-text-2);
+  border-left: 2px solid var(--s-warn);
+  background: color-mix(in srgb, var(--s-warn) 7%, transparent);
+  border-radius: 0 var(--radius-s) var(--radius-s) 0;
+  padding: 6px 10px;
+  overflow-wrap: anywhere;
+}
+.composer-input {
+  border: none;
+  background: none;
+  font: inherit;
+  line-height: 1.6;
+  color: var(--s-text);
+  outline: none;
+  min-height: 24px;
+  /* Auto-grow comes free: an editable box is sized by its content. This caps
+     that growth and turns on the inner scrollbar only once it passes the cap. */
+  max-height: var(--composer-max-h);
+  overflow-y: auto;
+  /* A pasted URL must not widen the composer past the pane. */
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+/* Placed over the editable rather than beside it, which works because the
+   editor wraps the placeholder in an aria-hidden element that collapses to zero
+   height. An editor upgrade that gives that wrapper a box of its own would push
+   the editable down by the height of one line - which is the shape to look for
+   if the composer ever opens too tall. */
+.composer-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: 100%;
+  color: var(--c-composer-placeholder);
+  line-height: 1.6;
+  /* One line, whatever the width: it floats over the editor, and a second
+     line would paint across the control row beneath. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* It is a label, not a target: clicks belong to the editable beneath it. */
+  pointer-events: none;
+  user-select: none;
+}
+.composer-box[data-disabled="true"] .composer-input,
+.composer-box[data-disabled="true"] .composer-placeholder {
+  opacity: 0.6;
+}
+
+/* A typed line is its own paragraph, so the margins go: the box has to read
+   like the plain text area it replaced, where one Shift+Enter is one line. */
+.composer-paragraph {
+  margin: 0;
+}
+
+/* Lists: the answer side's 22px hanging indent, so a wrapped item aligns past
+   its own marker instead of under it. */
+.composer-ul,
+.composer-ol {
+  padding-left: 22px;
+  margin: 0;
+}
+.composer-ul {
+  list-style: disc;
+}
+.composer-ol {
+  list-style: decimal;
+}
+.composer-ul .composer-ul {
+  list-style: circle;
+}
+.composer-ul .composer-ul .composer-ul {
+  list-style: square;
+}
+.composer-listitem {
+  margin: 0;
+}
+/* A nested list belongs to the item above it; the item that carries it is a
+   container, not an entry, so it shows no marker of its own. */
+.composer-nested-listitem {
+  list-style: none;
+}
+.composer-nested-listitem::before,
+.composer-nested-listitem::after {
+  display: none;
+}
+
+/* Task lists drop the marker - the checkbox IS the marker - and each item
+   carries the indent itself, which lands its text in the same column as a
+   bullet list's so mixed lists read as one column. */
+.composer-checklist {
+  list-style: none;
+  padding-left: 0;
+}
+.composer-listitem-checked,
+.composer-listitem-unchecked {
+  position: relative;
+  list-style: none;
+  padding-left: 22px;
+  outline: none;
+}
+/* The box is drawn, never a native input: the same hand-drawn glyph the answer
+   side uses, on the same tokens. It is a real box rather than a background so
+   it can carry its own cursor; the TARGET that toggles it is the whole 22px
+   indent gutter it sits in, which the editor measures off this rule's own
+   padding-left - so changing that padding moves the hit area with it. */
+.composer-listitem-checked::before,
+.composer-listitem-unchecked::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 0.32em;
+  width: 0.9em;
+  height: 0.9em;
+  border: 1.5px solid var(--s-border-strong);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.composer-listitem-checked::before {
+  background: var(--s-accent);
+  border-color: var(--s-accent);
+}
+.composer-listitem-checked::after {
+  content: "";
+  position: absolute;
+  left: calc(1px + 0.28em);
+  top: calc(0.32em + 0.08em);
+  width: 0.24em;
+  height: 0.48em;
+  border: solid var(--s-on-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+/* A code block in the composer is the answer side's slab on a TIGHTER inset -
+   10px 12px against the answer's 14px 16px, 4px margins against its 10px -
+   because this slab nests inside the composer box's own padding, where the
+   answer's sits directly on the bubble. Recorded as a deliberate deviation in
+   the design dossier. It also drops the horizontal scroller: the box already
+   wraps, and a second scroll axis inside a composer loses the caret. */
+.composer-code {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--c-code-bg);
+  color: var(--c-code-fg);
+  border-radius: var(--radius-m);
+  padding: 10px 12px;
+  margin: 4px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+.composer-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* The chips' glyphs sit flush with the text above them, so the row steps
+     out by the chip's own padding. */
+  margin-left: -8px;
+  /* Four controls plus Send do fit the 48rem composer, but a narrow phone is
+     not 48rem: wrapping keeps every control reachable instead of pushing Send
+     past the edge. Never wraps at the widths the prototype was drawn at. */
+  flex-wrap: wrap;
+  /* Two wrapped rows' borrowed 4px bands must never meet. */
+  row-gap: 8px;
+}
+
+/* icon control (attach) */
+/* the row's controls: attach, the two toggles and the model selector are one
+   kind of thing - a quiet chip with a glyph, no border, lit in the accent
+   when it is on. The label is a span so the narrow layout can drop it. */
+.ctl {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-s);
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+  white-space: nowrap;
+  transition:
+    color var(--dur-fast) var(--ease-standard),
+    background var(--dur-fast) var(--ease-standard);
+}
+/* The drawn chip keeps the prototype's density; the finger gets the 40px
+   floor. Horizontal inset stays 0 so neighbours cannot overlap. */
+.ctl::after {
+  content: "";
+  position: absolute;
+  inset: -4px 0;
+}
+.ctl .i {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+.ctl:not(:disabled):hover {
+  background: color-mix(in srgb, var(--s-text) 7%, transparent);
+  color: var(--s-text);
+}
+/* On is ink alone: three chips in a row, one of them boxed or filled, would
+   read as the primary action and compete with Send. */
+.ctl[aria-pressed="true"] {
+  color: var(--s-accent);
+}
+/* A lit chip stays lit under the pointer, a step brighter: the hover rule
+   above outranks the pressed one, and would turn it white. */
+.ctl[aria-pressed="true"]:not(:disabled):hover {
+  color: var(--s-accent-hover);
+}
+.ctl:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* A toggle that is on but will not apply this turn (web search, while
+   thinking is pinned on a model that cannot reason and use tools at once):
+   struck and quiet, with the why in its title. The pressed look goes with it,
+   or the row would promise what the turn will not do. */
+.ctl[data-held] {
+  color: var(--s-text-3);
+}
+.ctl[data-held] .lbl {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--s-text-3) 60%, transparent);
+}
+
+/* context meter: how full the window was on the last exchange, as a ring in
+   the row's right dock (owner decision 2026-08-04, amending the 2026-07-28
+   dock rule: the right side is what runs the turn AND what it costs). The
+   quiet state earns no standing text - the percentage only matters once it is
+   high - and the numbers live one click away in the card below. The ring's
+   geometry never changes with its level, so escalation cannot reflow the row.
+   No transition on level changes - a dial that eases into a new color reads
+   as something happening, and nothing is. */
+.context-dock {
+  position: relative;
+  /* Flex-centered so the button sits on the pills' center line: a block
+     wrapper's line-box strut would float the ring ~2px above its neighbours. */
+  display: flex;
+  align-items: center;
+  /* The dock's auto-margin: docks ring + model + Send right at full width.
+     The selector's own fallback margin below covers the ring's absence. */
+  margin-left: auto;
+}
+.context-dock + .model-select {
+  margin-left: 0;
+}
+.context-ring {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  /* A chip's height, so the dock reads as one row of equals. */
+  height: 32px;
+  min-width: 32px;
+  padding: 0 8px;
+  border-radius: var(--radius-s);
+  color: var(--s-accent);
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+/* Borrowed hit-area up to the 40px floor: the ring is the row's narrowest
+   control, so it borrows harder than the toggles do - 7px vertically (still
+   clear of the textarea above), 4px toward the model pill (half the row gap,
+   clear of the pill's own borrowed area), and 10px into the dock's dead
+   auto-margin on the left, where there is nothing to overlap. */
+.context-ring::before {
+  content: "";
+  position: absolute;
+  inset: -4px 0;
+}
+.context-ring:hover,
+.context-ring[data-open="true"] {
+  background: color-mix(in srgb, var(--s-text) 7%, transparent);
+}
+.context-ring svg {
+  display: block;
+}
+.context-ring circle {
+  fill: none;
+  stroke-width: 1.75;
+}
+.ring-track {
+  stroke: color-mix(in srgb, var(--s-text-3) 40%, transparent);
+}
+/* The arc rides currentColor so the level tints set one thing, not three. */
+.ring-fill {
+  stroke: currentColor;
+  stroke-linecap: round;
+  /* The arc GROWS in on first report and GLIDES between readings (an estimate
+     replaced by the turn's measured number, a model switch) instead of
+     popping. The keyframe's from-value is the full circumference - an empty
+     ring - and must mirror RING_CIRCUMFERENCE in context-meter.tsx
+     (2 * pi * 6.5). Reduced motion: the base-sheet law flattens both. */
+  transition: stroke-dashoffset var(--dur-slow) var(--ease-standard);
+  animation: ring-grow var(--dur-slow) var(--ease-entrance);
+}
+/* The figure, once the window is filling: small mono beside the ring, in the
+   level's colour. Tabular so it never jogs between readings. */
+.ring-pct {
+  font-family: var(--font-mono);
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
+  color: currentColor;
+}
+@keyframes ring-grow {
+  from {
+    stroke-dashoffset: 40.841;
+  }
+}
+/* Filling up. The arc goes amber and the figure appears: noticed on the next
+   glance at the composer, not an interruption to the sentence being typed. */
+.context-dock[data-level="warn"] .context-ring {
+  color: var(--s-warn);
+}
+/* Nearly full - the oldest turns are about to stop being sent, which is
+   worth more than a tint: the danger hue, and a wash behind the figure. */
+.context-dock[data-level="high"] .context-ring {
+  color: var(--s-danger);
+  background: color-mix(in srgb, var(--s-danger) 10%, transparent);
+}
+
+/* The card behind the ring: the model menu's drop-up geometry and surface,
+   holding a readout instead of choices - a bar, the numbers, and what a full
+   window actually does (the one sentence a hover tooltip could never hand to
+   touch). */
+.context-pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  /* Hinged on the arc's left edge and opening to its right: hung from the
+     arc's right it reached left over the composer's own text. Where it would
+     run past the box's edge the component slides it back inside
+     (useFloaterNudge). */
+  left: 0;
+  z-index: 40;
+  width: 17rem;
+  max-width: min(24rem, calc(100vw - 2rem));
+  padding: 10px 12px;
+  background: var(--c-menu-bg, var(--s-bg-raised));
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-m);
+  box-shadow: 0 12px 32px var(--s-shadow);
+  clip-path: var(--clip-panel);
+  animation: chat-enter var(--dur-base) var(--ease-entrance);
+}
+.context-pop-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+  /* The digits change every turn; proportional ones would jog the label. */
+  font-variant-numeric: tabular-nums;
+}
+.context-bar {
+  height: 4px;
+  margin: 8px 0;
+  border-radius: 99px;
+  background: var(--s-bg-inset);
+  overflow: hidden;
+}
+.context-bar > span {
+  display: block;
+  height: 100%;
+  /* The 1% floor must survive rounding to visible pixels. */
+  min-width: 4px;
+  border-radius: 99px;
+  background: var(--s-accent);
+  /* Glides with the ring when a reading changes under an open card. */
+  transition: width var(--dur-slow) var(--ease-standard);
+}
+.context-dock[data-level="warn"] .context-bar > span {
+  background: var(--s-warn);
+}
+.context-dock[data-level="high"] .context-bar > span {
+  background: var(--s-danger);
+}
+.context-pop p {
+  margin-top: 4px;
+  font-family: var(--font-ui);
+  /* Two sentences of prose: the meta size, a step under the head, where the
+     micro size is for a word or two. */
+  font-size: var(--text-meta);
+  /* Text-strength, not the hint tint: these two sentences are the card's
+     whole payload, and it only appears when deliberately opened. */
+  color: var(--s-text-2);
+  font-variant-numeric: tabular-nums;
+}
+/* The later action, docked under a hairline: the quiet tint, since it is a
+   promise rather than a reading. */
+.context-pop .context-later {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--s-border);
+  color: var(--s-text-3);
+}
+
+/* model selector: a pill that opens a drop-up (the composer sits at the
+   bottom of the pane, so a menu below it would be off-screen). Docked on the
+   row's right beside Send (owner decision 2026-07-28, recorded in DESIGN.md):
+   per-turn adjustments sit left, what runs the turn sits right. */
+.model-select {
+  position: relative;
+  /* Fallback dock margin, for when no context ring precedes it (nothing
+     reported yet); with the ring present, its dock carries the margin. */
+  margin-left: auto;
+  /* The tag can be long and the row must not push Send off the edge. */
+  min-width: 0;
+}
+.model-trigger {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  /* Capped so a long tag cannot crowd the switches out, and never wider than
+     the row leaves it - the label ellipsizes inside whichever wins. */
+  max-width: min(14rem, 100%);
+}
+.model-trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-trigger .chev {
+  color: inherit;
+  transition: transform var(--dur-base) var(--ease-entrance);
+}
+.model-trigger[data-open="true"] .chev {
+  transform: rotate(180deg);
+}
+.model-trigger[data-open="true"] {
+  color: var(--s-text);
+}
+.model-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  /* Hinged on the trigger's right edge, where the eye already is; where
+     that would hang it off the screen (a narrow row), the component slides
+     it back inside the box (useFloaterNudge). */
+  right: 0;
+  z-index: 40;
+  /* The prototype's panel: a tag beside its badge, then a fixed residency
+     column, so the row never needs more. */
+  width: min(300px, calc(100vw - 2rem));
+  max-height: 16rem;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* Themes may re-point --c-menu-bg when their raised surface is too
+     translucent for a floating panel over text (aurora). */
+  background: var(--c-menu-bg, var(--s-bg-raised));
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-m);
+  box-shadow: 0 12px 32px var(--s-shadow);
+  clip-path: var(--clip-panel);
+  animation: chat-enter var(--dur-base) var(--ease-entrance);
+}
+.model-opt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1px 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--radius-s);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--s-text);
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.model-opt > span {
+  /* The tag is mono (it is an identifier to be typed); its description is
+     prose and reads as prose. */
+  font-family: var(--font-ui);
+  font-size: var(--text-micro);
+  color: var(--s-text-3);
+}
+.model-opt > span {
+  grid-column: 1;
+}
+.model-opt > .model-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: inherit;
+}
+/* Where the model is, at the row's right: a dot filled in the ok hue when
+   it is in memory, a ring when it is on disk and choosing it starts a load.
+   A fixed column, so the dots stand in a line whatever the word beside them. */
+.model-opt > .model-where {
+  grid-row: 1;
+  grid-column: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 4.5rem;
+  gap: 6px;
+  font-family: var(--font-ui);
+  font-style: normal;
+  font-size: var(--text-micro);
+  color: var(--s-text-3);
+  white-space: nowrap;
+}
+.model-where::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--s-text-3);
+}
+.model-where[data-loaded="true"]::before {
+  background: var(--s-ok);
+  box-shadow: none;
+}
+/* The workspace default's badge: a quiet word, not a second tag. */
+.model-tag em {
+  font-family: var(--font-ui);
+  font-style: normal;
+  font-size: var(--text-micro);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--s-accent);
+}
+.model-opt:hover {
+  background: var(--s-bg-inset);
+}
+.model-opt[aria-checked="true"] {
+  background: color-mix(in srgb, var(--s-accent) 9%, transparent);
+}
+/* The pinned tag the listing does not offer: shown so a conversation's own
+   model appears in the menu, inert because it is already in force. Kept above
+   the contrast floor rather than dimmed into unreadability - the line
+   explaining WHY it cannot be picked is the whole point of showing it. */
+.model-opt[aria-disabled="true"] {
+  color: var(--s-text-3);
+  cursor: not-allowed;
+}
+.model-opt[aria-disabled="true"]:hover {
+  background: none;
+}
+/* A statement, not a choice: the listing could not be fetched. Padded like an
+   option so it reads as part of the same column, but it is neither focusable
+   nor pickable - Default beside it still is. */
+.model-note {
+  padding: 6px 10px;
+  font-family: var(--font-ui);
+  font-size: var(--text-micro);
+  color: var(--s-text-3);
+}
+
+/* send / stop button (the context ring - or the model selector, before a
+   reading exists - carries the auto-margin that docks the group right) */
+.send {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  margin-left: 4px;
+  /* The prototype's 10px on aurora (radius-s 8), a touch rounder than the
+     chips on any theme, never a rounded stranger on a squared one. */
+  border-radius: calc(var(--radius-s) + 2px);
+  background: var(--s-accent);
+  color: var(--s-on-accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-spring);
+}
+.send:not(:disabled):hover {
+  background: var(--s-accent-hover);
+}
+.send:not(:disabled):active {
+  transform: scale(0.96);
+}
+.send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+@media (max-width: 767px) {
+  /* Narrow rows wrap: revert the right-dock so Send, not the selector, takes
+     the trailing margin - a wrapped Send orphaned at the left of its own line
+     reads as misaligned. This is the geometry the pre-dock layout verified.
+     The context ring reverts with it, or its surviving auto-margin would
+     strand it alone at the right of the toggles line. */
+  .context-dock,
+  .model-select {
+    margin-left: 0;
+  }
+  .send {
+    margin-left: auto;
+  }
+}
+
+.hint {
+  text-align: center;
+  font-size: var(--text-micro);
+  color: var(--s-text-3);
+  margin-top: 8px;
+}
+
+/* attachment chips (tray + on a sent turn) */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip-row.on-turn {
+  justify-content: flex-end;
+  /* 2px, not taste: the .turn column already opens 8px between siblings, and
+     the reply's file row sits exactly 10px under its content (its column's
+     gap) - so 8 + 2 makes the file-to-bubble breath IDENTICAL on both sides
+     of the conversation (owner call, 2026-08-09; the old 6px made a 14px
+     total that read as the chips hanging clear of their own message). */
+  margin-bottom: 2px;
+  /* Fill from the BOTTOM row up (owner call, 2026-08-09): the row nearest the
+     bubble packs full and any leftover chips hang above it, so the files read
+     as growing out of the message they rode in on rather than dangling a
+     sparse row over it. wrap-reverse only flips which edge lines stack from -
+     the 6px row gap and each chip's inset ::after targets are untouched, so
+     the cross-row hit-target arithmetic recorded in DESIGN.md still holds.
+     Tab order visits the bottom row first; the chips are an unordered set of
+     files, so no meaning rides on it. */
+  flex-wrap: wrap-reverse;
+}
+/* Files a REPLY produced. Left-aligned, unlike the on-turn row: an assistant
+   turn is a left-hand column of stacked parts, and a right-docked row would
+   read as belonging to the question above it.
+
+   The row gap is 10px rather than the shared 6px, and that is load-bearing
+   rather than taste: each chip's hit target is widened 5px above and below by
+   an ::after overlay (see .chip-download::after), so at a 6px gap the overlays
+   of two WRAPPED rows overlap by 4px and the later chip in source order wins
+   the click. A file would then be downloaded by clicking just under a
+   different one. At 10px they meet exactly and never cross, and the 41px
+   target survives intact. Column gap stays 6px - chips side by side cannot
+   collide, since the overlay is inset 0 horizontally. */
+.chip-row.on-reply {
+  justify-content: flex-start;
+  row-gap: 10px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 15rem;
+  font-size: var(--text-meta);
+  color: var(--s-text-2);
+  background: var(--s-bg-raised);
+  border: 1px solid var(--s-border);
+  border-radius: var(--radius-s);
+  padding: 4px 8px;
+}
+.chip.problem {
+  color: var(--s-danger);
+  background: color-mix(in srgb, var(--s-danger) 8%, var(--s-bg-raised));
+  border-color: color-mix(in srgb, var(--s-danger) 40%, var(--s-border));
+}
+.chip.gone {
+  border-style: dashed;
+  background: transparent;
+  color: var(--s-text-3);
+}
+.chip.busy {
+  opacity: 0.6;
+}
+.chip-name {
+  min-width: 0;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chip-name.gone {
+  text-decoration: line-through;
+}
+.chip-meta {
+  flex-shrink: 0;
+  font-size: var(--text-micro);
+  color: var(--s-text-3);
+}
+.chip-glyph {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--s-text-3);
+}
+.chip-glyph.ok {
+  color: var(--s-ok);
+}
+.chip-glyph.problem {
+  color: var(--s-danger);
+}
+/* A chip that IS the control: the whole chip is the hit target, so the padding
+   moves off the li and onto the button rather than leaving a dead border ring
+   around a clickable middle. The chip keeps its own frame; this fills it. */
+.chip:has(> .chip-download) {
+  padding: 0;
+}
+.chip-download {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 8px;
+  color: inherit;
+  /* A button centres its text by default, and the filename inside this one is
+     a clipped single line - so without this the ellipsis eats BOTH ends of a
+     long name instead of just the tail. */
+  text-align: left;
+  border-radius: inherit;
+  transition: background var(--dur-fast) var(--ease-standard), color var(--dur-fast);
+}
+/* The chip is 31px tall against the 40px pointer-target floor; the overlay
+   widens the CLICKABLE box past the chip's visual edges without moving a
+   pixel of paint (design review, 2026-08-08). */
+.chip-download::after {
+  content: "";
+  position: absolute;
+  inset: -5px 0;
+}
+.chip-download:hover,
+.chip-download:focus-visible {
+  background: var(--s-bg-inset);
+  color: var(--s-text);
+}
+.chip-download:hover .chip-glyph,
+.chip-download:focus-visible .chip-glyph {
+  /* The arrow is the affordance; it is what brightens, not the whole label. */
+  color: var(--s-accent);
+}
+/* The dimming is .chip.busy's job, as it is for every other chip; the disabled
+   attribute is what stops a second click, and this keeps a hover state from
+   lighting up a control that will not answer. */
+.chip-download:disabled {
+  pointer-events: none;
+}
+
+/* The two icon affordances a sent chip can carry - take the file, remove the
+   file - share one shape, so the pair reads as a pair rather than as an icon
+   next to a different kind of icon. The whole-chip .chip-download above is the
+   REPLY's form, where there is nothing else on the chip to compete with it.
+
+   Each is a 16px box (a 12px glyph in 2px of padding), so both take the same
+   ::after treatment .chip-download uses - widened where the chip has room to
+   give and NOT where it does not. The arithmetic, since the insets look
+   arbitrary otherwise: the chip is 31px tall (a 12px chip font at the
+   inherited 1.75 line-height is a 21px line box, plus 4px padding and 1px
+   border each side), which centres a 16px button 7.5px below the chip's top
+   edge. inset -7px vertically therefore spans 0.5px to 30.5px - the full
+   height the chip can offer, and still entirely INSIDE it, so the 6px row gap
+   between wrapped rows is never crossed. Horizontally each grows AWAY from its
+   neighbour: they sit 6px apart, each reaches 1px into that gap and takes the
+   rest from the chip's own 8px side padding. Targets land at 22x30 (.chip-get)
+   and 24x30 (.chip-x) with 4px of dead space still between them.
+
+   Both axes stay under the dossier's 40px floor. That is a recorded deviation,
+   not an oversight, and the record lives where deviations live - see "The
+   chip's action pair" in docs/design/DESIGN.md, which carries the reasoning
+   and the precedent it follows. */
+.chip-x,
+.chip-get {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  border-radius: var(--radius-s);
+  padding: 2px;
+  color: var(--s-text-3);
+  transition: background var(--dur-fast) var(--ease-standard), color var(--dur-fast);
+}
+.chip-get::after,
+.chip-x::after {
+  content: "";
+  position: absolute;
+}
+.chip-get::after {
+  /* Reaches left, away from the X on its right. */
+  inset: -7px -1px -7px -5px;
+}
+.chip-x::after {
+  /* Reaches right, away from the arrow on its left (and into the chip's own
+     8px padding, never past it). */
+  inset: -7px -7px -7px -1px;
+}
+.chip-x:not(:disabled):hover {
+  background: var(--s-bg-inset);
+  color: var(--s-text);
+}
+.chip-x:disabled {
+  opacity: 0.5;
+}
+/* The arrow brightens to the accent, exactly as it does on a reply's download
+   chip, rather than inventing a second vocabulary for the same one glyph. */
+.chip-get:hover,
+.chip-get:focus-visible {
+  background: var(--s-bg-inset);
+  color: var(--s-accent);
+}
+/* Same as the reply chip: `disabled` refuses the second click, and this keeps a
+   hover from lighting up a control that will not answer. The dimming belongs to
+   .chip.busy, which the chip wears for the whole transfer. */
+.chip-get:disabled {
+  pointer-events: none;
+}
+
+/* ---------- sidebar row actions: menu trigger, menu, inline rename ----------
+   One action slot per row, however many actions the row grows: the trigger
+   opens a menu rather than the row sprouting a second icon. The trigger fills
+   the row's height and 40px of its width, so the pointer target clears the
+   dossier's floor on the axis the row does not constrain, while the visible
+   chip stays the small quiet square the prototype's sidebar implies. */
+.convo-row {
+  position: relative;
+}
+.convo-action {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--s-text-3);
+}
+.convo-action svg {
+  position: relative;
+}
+.convo-action::before {
+  content: "";
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-s);
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+button.convo-action {
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-standard), color var(--dur-fast);
+}
+/* An open menu keeps its trigger visible - the panel must not look unanchored
+   the moment the pointer leaves the row it belongs to. */
+.convo-row:hover button.convo-action,
+.convo-row:focus-within button.convo-action,
+button.convo-action[data-open="true"] {
+  opacity: 1;
+}
+button.convo-action:hover,
+button.convo-action[data-open="true"] {
+  color: var(--s-text);
+}
+button.convo-action:hover::before,
+button.convo-action[data-open="true"]::before {
+  background: var(--s-border-strong);
+}
+
+/* The trigger and its panel both position against the row, so their wrapper
+   must not become a box of its own. */
+.convo-menu-root {
+  display: contents;
+}
+/* The trigger spans the row's full height, so its ring draws inside it -
+   an outward ring would clip against the scroll container's right edge. */
+button.convo-action:focus-visible {
+  outline-offset: -2px;
+}
+[data-part="convo-menu"] {
+  /* A portal at the app layer: viewport-anchored (coordinates arrive inline
+     from the trigger's rect), floating above the sidebar and overhanging its
+     edge over the content. Living OUTSIDE the sidebar is also what lets its
+     frost work - the sidebar is a backdrop-blur layer, and a blur nested in
+     another blur cannot sample the page behind it. */
+  position: fixed;
+  z-index: 45;
+  min-width: 7.5rem;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  /* Themes may re-point --c-menu-bg when their raised surface is too
+     translucent for a floating panel over text (aurora). */
+  background: var(--c-menu-bg, var(--s-bg-raised));
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-m);
+  box-shadow: 0 16px 40px var(--s-shadow);
+  animation: chat-enter var(--dur-base) var(--ease-entrance);
+}
+.convo-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: var(--radius-s);
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease-standard), color var(--dur-fast);
+}
+.convo-menu-item:hover {
+  background: var(--s-bg-inset);
+  color: var(--s-text);
+}
+.convo-menu-danger,
+.convo-menu-danger:hover {
+  color: var(--s-danger);
+}
+.convo-menu-danger:hover {
+  background: color-mix(in srgb, var(--s-danger) 10%, transparent);
+}
+
+/* Sits exactly where the row button sat, at the same size, so committing a
+   rename does not make the list jump. The focus ring is drawn INSIDE the
+   field (negative offset): the rows sit flush against the scroll container's
+   edges and each other, so an outward ring is clipped at the top of the list
+   and painted over by a neighbouring row's hover fill. */
+.convo-rename {
+  display: block;
+  width: 100%;
+  padding: 7px 9px;
+  font-size: var(--text-label);
+  color: var(--s-text);
+  background: var(--s-bg-inset);
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-s);
+}
+.convo-rename:focus-visible {
+  outline-offset: -2px;
+}
+/* While a row holds focus (the rename field, or its pinned-open menu
+   trigger), it paints above its siblings so nothing it draws is overlapped
+   by a lower row's hover fill. */
+.convo-row:focus-within {
+  z-index: 1;
+}
+
+/* shared keyframes */
+@keyframes chat-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes chat-dotpulse {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+@keyframes chat-caret {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes chat-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes chat-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* KaTeX output (stylesheet loaded in the root layout) is colour-neutral; this
+   only pins it to the answer's own text colour and keeps a wide display formula
+   scrolling inside the column rather than pushing the layout sideways. */
+[data-part="content"] .katex {
+  color: inherit;
+}
+[data-part="content"] .katex-display {
+  margin: 0.8em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+[data-part="content"] .katex-display > .katex {
+  max-width: 100%;
+}

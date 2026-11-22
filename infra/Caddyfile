@@ -1,0 +1,100 @@
+# Production reverse proxy. Mounted read-only into the `caddy` service that the
+# production compose overlay (infra/docker-compose.prod.yml) adds, which is the
+# ONLY service publishing ports there - everything else is reachable on the
+# internal network alone.
+#
+# Its job is to give the browser ONE origin for both the web UI and the API.
+# That is the same shape the Next.js dev proxy provides locally, which is why
+# CORS never enters the picture in either environment.
+#
+# infra/Caddyfile.dev is a separate, unwired sketch for a plain-HTTP local
+# experiment; this is the file a deployment runs.
+{
+	# Contact address registered with the certificate authority, used for expiry
+	# and problem notices. Optional - ACME issues perfectly well without one -
+	# but recommended on a real domain, since it is the only warning a
+	# deployment gets before a renewal problem becomes an outage. Compose passes
+	# the whole directive or nothing at all (see the caddy service's
+	# CADDY_ACME_EMAIL_OPTION), because an `email` line with an empty argument
+	# is a parse error rather than a no-op.
+	{$CADDY_ACME_EMAIL_OPTION}
+}
+
+# No domain means `localhost`, served with a certificate from Caddy's own
+# internal CA, so a freshly provisioned box has working HTTPS before DNS exists.
+# A real hostname switches the same file to publicly-trusted ACME certificates
+# with no other edit: Caddy decides between the two from the site address alone.
+#
+# The fallback below only covers DOMAIN being UNSET - Caddy does not apply a
+# placeholder default to a variable that is set and empty, and an empty site
+# address makes everything under it read as global options. The compose service
+# therefore substitutes `localhost` for a blank value before it ever gets here;
+# this default is the backstop for running Caddy outside compose.
+{$DOMAIN:localhost} {
+	# Response headers for everything below.
+	header {
+		# Stop a browser from second-guessing a declared content type.
+		X-Content-Type-Options nosniff
+		# Send the origin, not the full path, to other sites.
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	# HSTS tells a browser to refuse plain HTTP for this origin for a year, and
+	# it is deliberately NOT sent for the no-domain case. A certificate from
+	# Caddy's internal CA is untrusted by default, so pinning a browser to HTTPS
+	# there locks it out of an origin it cannot validate, and the only cure is
+	# clearing the browser's HSTS store by hand. Keyed on the request host
+	# rather than on DOMAIN, so it is right however the site address was set.
+	@public not host localhost 127.0.0.1 ::1
+	header @public Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+	# The versioned API, straight to the backend. flush_interval -1 disables
+	# response buffering: the chat endpoint streams server-sent events, and a
+	# buffering proxy would hold every token until the answer finished.
+	#
+	# One path here also exists as a route handler on the frontend
+	# (/api/v1/integrations/oauth/callback, the OAuth return leg). Serving it
+	# from the backend is correct and one hop shorter - the frontend's copy only
+	# relays to this same endpoint, and the backend answers a redirect to an
+	# absolute URL either way.
+	handle /api/v1/* {
+		reverse_proxy backend:8000 {
+			flush_interval -1
+		}
+	}
+
+	# Liveness and readiness, for an uptime monitor or a load balancer.
+	# /readyz is routed ahead of the endpoint itself landing; until then the
+	# backend simply answers 404, which is harmless.
+	handle /healthz {
+		reverse_proxy backend:8000
+	}
+
+	handle /readyz {
+		reverse_proxy backend:8000
+	}
+
+	# Everything else - the pages, the static assets, and every Next.js route
+	# handler under /api - goes to the Next server.
+	#
+	# flush_interval -1 is applied to the WHOLE catch-all rather than to a
+	# matcher listing the streaming routes, and that is a deliberate trade. The
+	# browser's real SSE traffic does not use /api/v1 at all: it POSTs to the
+	# frontend's own /api/chat, which pipes the backend stream back, and model
+	# pulls stream through /api/models/pull the same way. Both sit behind this
+	# block. A per-route matcher would therefore need editing every time a
+	# streaming route is added, and the failure mode is silent - the answer
+	# still arrives, just all at once at the end, which reads as "the model is
+	# slow" rather than as a proxy misconfiguration. Unbuffered writes for
+	# static assets cost a little throughput; a token stream that does not
+	# stream costs the product's core interaction.
+	#
+	# Worth knowing: the app sets `x-accel-buffering: no` on its SSE responses,
+	# but that header is an nginx convention and Caddy does not act on it. It is
+	# not a safety net for this setting.
+	handle {
+		reverse_proxy frontend:3000 {
+			flush_interval -1
+		}
+	}
+}

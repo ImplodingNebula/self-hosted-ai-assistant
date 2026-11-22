@@ -1,0 +1,1561 @@
+/* =====================================================================
+   Console surface - the theme-agnostic base layer.
+
+   The admin console (a left rail beside a management page) and the Model
+   Manager that is its first page. Neither has a prototype: the dossier
+   describes the chat surface and, since 2026-07-25, the integrations
+   page, so these patterns are built from the token system directly and
+   recorded as a dated amendment in docs/design/DESIGN.md.
+
+   Two anatomies carry the page. A ROW is the integrations card shape -
+   a summary line (identity on the left, state pills in a right cluster,
+   an expand chevron) over an optional body of detail - because the
+   questions are the same shape: which of these is ready, and what is
+   true of this one. An ACTIVITY PANEL is new: exactly one operation can
+   run at a time (the backend is single-flight), so it renders once,
+   above the grid, rather than inside whichever row started it.
+
+   Uses ONLY tier-2 (--s-*) and tier-3 (--c-*) tokens plus the shape /
+   motion / type-scale tokens - never a raw palette value. The .btn /
+   .btn-primary / .btn-ghost primitives are shared with the chat surface
+   (chat.css) and the .btn-danger* variants with the integrations surface
+   (integrations.css); two genuinely generic helpers are borrowed from
+   that sheet as well rather than duplicated - .badge (a micro pill) and
+   .pill-label (the visually-hidden name a state pill needs so a screen
+   reader does not hear two bare words in a row).
+
+   Kept as plain (unlayered) CSS, like its two sibling sheets, so the
+   @layer theme-flourish blocks below it can add what a theme wants
+   (Aurora frosts the panels) or subtract it (Minimal flattens the rows).
+   Both key on the data-part hooks - console-rail, model-manager,
+   mm-activity - so the markup never forks per theme.
+   ===================================================================== */
+
+/* ---------- console shell ---------- */
+.console-page {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  width: 100%;
+  /* Above whatever a theme paints behind the app (aurora's sky), like the
+     chat shell. */
+  position: relative;
+  z-index: 1;
+}
+
+/* Back-to-chat control on the topbar's left - the same quiet icon+label
+   chrome the integrations page uses, so leaving any management surface
+   looks and sits identically. */
+.console-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: -6px;
+  min-height: 32px;
+  padding: 0 10px 0 6px;
+  border-radius: var(--radius-s);
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+  transition: background var(--dur-fast) var(--ease-standard), color var(--dur-fast);
+}
+.console-back:hover {
+  background: var(--s-bg-raised);
+  color: var(--s-text);
+}
+
+.console-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* The sidebar's width, so the move between chat and console swaps one for
+   the other in place. */
+[data-part="console-rail"] {
+  flex-shrink: 0;
+  width: 272px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 10px;
+  border-right: 1px solid var(--s-border);
+  background: var(--c-sidebar-bg);
+}
+.console-rail-item {
+  display: flex;
+  align-items: center;
+  /* the dossier's 40px interactive floor */
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: var(--radius-s);
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+  transition: background var(--dur-fast) var(--ease-standard), color var(--dur-fast);
+}
+.console-rail-item:hover {
+  background: var(--s-bg-raised);
+  color: var(--s-text);
+}
+/* The current section reads as current from the word's weight and its
+   fill, not from color alone: the raised pane, as the sidebar's current
+   row (the inset one resolved to near-black on the glass). */
+.console-rail-item[aria-current="page"] {
+  background: var(--s-bg-raised);
+  color: var(--s-text);
+  font-weight: 500;
+}
+
+/* The work column: the box a theme veils (aurora holds its sky back from the
+   page here), so it never scrolls itself - the scroll container is inside. */
+.console-main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+.console-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 32px 28px 72px;
+}
+
+/* The shared .btn primitive measures 37px; the console floors its own uses
+   at the dossier's 40px without deciding for the other surfaces. */
+.console-body .btn {
+  min-height: 40px;
+}
+
+/* Narrow: the rail becomes a horizontal tab strip above the page rather
+   than a column squeezing it. A fixed column beside a grid of rows that
+   already wrap leaves neither enough room to read. The breakpoint is the
+   chat drawer's, so the two shells change shape at the same width. */
+@media (max-width: 767px) {
+  .console-body {
+    flex-direction: column;
+  }
+  [data-part="console-rail"] {
+    width: 100%;
+    flex-direction: row;
+    gap: 2px;
+    padding: 8px 10px;
+    border-right: none;
+    border-bottom: 1px solid var(--s-border);
+    overflow-x: auto;
+  }
+  .console-rail-item {
+    white-space: nowrap;
+  }
+  .console-scroll {
+    padding: 20px 14px 60px;
+  }
+}
+
+/* ---------- the model manager page ---------- */
+[data-part="model-manager"] {
+  width: 100%;
+  max-width: 52rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.mm-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.mm-headline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+/* The page's own h1, in the serif display: the console topbar reads
+   "Console" for every section, so each page names itself in its column.
+   The integrations and members titles are the same rule. */
+.mm-title,
+.int-title,
+.mbr-title {
+  font-family: var(--font-prose);
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--s-text);
+}
+
+/* the live "loaded now" reading, beside the title: the topbar's status as
+   a list, a dot and a tag per row with its size at the right */
+.mm-loaded {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 16rem;
+  border: 1px solid var(--s-border);
+  border-radius: var(--radius-m);
+  clip-path: var(--clip-panel);
+  background: var(--c-tool-bg);
+  padding: 10px 14px 12px;
+}
+.mm-loaded-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--s-text-3);
+}
+.mm-loaded-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.mm-loaded-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--s-text-2);
+}
+.mm-loaded-row .mm-tag {
+  font-size: 12px;
+}
+.mm-loaded-row .mm-meta {
+  margin-left: auto;
+  padding-left: 12px;
+  font-size: 11px;
+  color: var(--s-text-3);
+}
+
+/* ---------- sections ---------- */
+.mm-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mm-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--s-text);
+}
+/* Why a group cannot be managed, at the volume a note is read at - the
+   section says it once, and no row repeats it. */
+.mm-section-note {
+  margin-top: -4px;
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+  line-height: 1.5;
+  max-width: 52ch;
+}
+
+.mm-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ---------- one model row ---------- */
+.mm-row {
+  border: 1px solid var(--s-border);
+  border-radius: var(--radius-m);
+  clip-path: var(--clip-panel);
+  background: var(--c-tool-bg);
+  overflow: hidden;
+}
+/* The head is the whole width of the row, and the whole of it tints under
+   the pointer; the summary button inside it is the row's one trigger, from
+   edge to edge, with the chevron at the card's right edge ALWAYS. The row's
+   action (Pull, Resume, the live readout) overlays a reserved column of the
+   summary's grid from OUTSIDE the trigger (.mm-action below), so a click on
+   an empty slot falls through and opens the row. */
+.mm-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.mm-head:hover {
+  background: color-mix(in srgb, var(--s-text) 4%, transparent);
+}
+.mm-summary,
+.mm-head.static {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto var(--slot, 6.5rem) 16px;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 14px 8px 16px;
+  text-align: left;
+}
+/* The slot lies over the reserved column, outside the trigger in the tree.
+   Every row reserves it even with no verb to show, so the pill dots form
+   ONE column down a section - the absent-verb rule governs the control,
+   never its gutter. */
+.mm-action {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: calc(14px + 16px + 12px);
+  width: 6.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+.mm-action > * {
+  pointer-events: auto;
+}
+.mm-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.mm-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+/* A model tag is an exact string that gets typed and compared, so it
+   reads in the monospace face everywhere it appears, as a small chip on
+   the panel fill (the prose's inline code, at the row's size). */
+.mm-tag {
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  font-weight: 500;
+  color: var(--s-text);
+  padding: 1px 5px;
+  border: 1px solid var(--s-border);
+  border-radius: 5px;
+  background: var(--s-bg-panel);
+  overflow-wrap: anywhere;
+}
+
+/* At-a-glance state (color + a dot + a word - never color alone). Each
+   pill reserves a fixed width so the DOTS line up down the list: a flex
+   row otherwise right-aligns the end of the WORD, and the dots rag by
+   however much the labels differ. Sized to the longest label each can
+   hold plus a few px of slack - surplus reservation lands between a
+   short label and the next dot and reads as misalignment, while a label
+   that OUTGROWS it pushes that one row's chevron out of the column. The
+   longest today is the check pill's "Think mode differs": ~113.9px
+   intrinsic at 12px Geist (7px dot + 6px gap included), measured in the
+   browser - past "Weights changed" at 107.9px. 7.5rem = 120px clears it
+   with ~6px of slack; the next label added must be measured against
+   this ceiling before it ships. */
+.mm-state {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  min-width: 7.5rem;
+  font-size: var(--text-meta);
+  white-space: nowrap;
+  /* the 4.5:1 text tier, not the 3:1 decorative one: these are status
+     WORDS, and --s-text-3 measures under the AA floor at --text-meta */
+  color: var(--s-text-2);
+}
+/* The dot carries the hue, the word stays in the text tier: a muted state
+   is a ring (none needed), ok and warn fill it. */
+.mm-state::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--s-text-3);
+}
+.mm-state.ok::before {
+  background: var(--s-ok);
+  box-shadow: none;
+}
+/* Operator-actionable gaps (a stale probe, a CPU-spilled one) carry the
+   warn hue on the word as well - the pill convention's two channels -
+   mixed toward the text so it holds AA on every theme. */
+.mm-state.warn::before {
+  background: var(--s-warn);
+  box-shadow: none;
+}
+.mm-state.warn {
+  color: color-mix(in srgb, var(--s-warn) 70%, var(--s-text));
+}
+
+/* A row whose role the tool check cannot measure holds the check column
+   open with nothing in it, so the weights pills still align down the
+   whole page - the column exists page-wide, some rows have nothing to
+   say in it. The chevron-width sibling does the same job for a static
+   row with nothing to expand. */
+.mm-state-space {
+  flex-shrink: 0;
+  min-width: 7.5rem;
+}
+.mm-chevron-space {
+  grid-column: 5;
+  width: 16px;
+}
+
+/* Aurora's rounded glass rows clip an OFFSET focus ring to two vertical
+   slivers (.mm-row is overflow:hidden for its corners); an inset ring
+   stays whole. Same pattern as chat's .selection-action. Minimal keeps
+   its rows overflow-visible, where the default offset ring already
+   renders complete. */
+.mm-summary:focus-visible,
+.mm-action .btn:focus-visible,
+.mm-pullmini:focus-visible {
+  outline-offset: -2px;
+}
+
+.mm-chevron {
+  grid-column: 5;
+  display: inline-flex;
+  color: var(--s-text-3);
+  transition: transform var(--dur-base) var(--ease-entrance), color var(--dur-fast);
+}
+.mm-summary:hover .mm-chevron {
+  color: var(--s-text);
+}
+.mm-summary[aria-expanded="true"] .mm-chevron {
+  transform: rotate(180deg);
+}
+
+/* Narrow: the identity takes a full row and the state pills stack beneath
+   it, rather than the pills taking their width out of the model tag -
+   which is a deletion, not a truncation. The chevron keeps the right edge
+   down all three rows, and the slot keeps its column only while something
+   is in it (the pills no longer line up across rows here, so an empty slot
+   would only push the tag). */
+@media (max-width: 700px) {
+  .mm-summary,
+  .mm-head.static {
+    --slot: 0px;
+    grid-template-columns: minmax(0, 1fr) var(--slot) 16px;
+    row-gap: 4px;
+    padding: 10px 12px 10px 14px;
+  }
+  .mm-head:has(.mm-action > *) .mm-summary {
+    --slot: 6.5rem;
+  }
+  /* a tag is an exact string: the size drops under it rather than splitting it */
+  .mm-loaded-row {
+    flex-wrap: wrap;
+  }
+  .mm-loaded-row .mm-tag {
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+  .mm-loaded-row .mm-meta {
+    flex: 1 1 100%;
+    margin-left: 0;
+    padding-left: 16px;
+  }
+  .mm-main {
+    grid-column: 1;
+  }
+  .mm-chevron,
+  .mm-chevron-space {
+    grid-column: 3;
+    grid-row: 1 / span 3;
+  }
+  .mm-state {
+    grid-column: 1;
+    min-width: 0;
+  }
+  /* Stacked pills have no column to hold open. */
+  .mm-state-space {
+    display: none;
+  }
+  .mm-action {
+    right: calc(12px + 16px + 12px);
+  }
+  .mm-loaded {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+.mm-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-top: 1px solid var(--s-border);
+  padding: 2px 16px 16px;
+}
+
+/* the declared facts: a self-sizing grid of label-over-value pairs */
+.mm-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+  gap: 12px 16px;
+  margin-top: 12px;
+}
+.mm-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.mm-fact dt {
+  font-size: var(--text-micro);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--s-text-3);
+}
+.mm-fact dd {
+  font-size: var(--text-label);
+  color: var(--s-text);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+/* a chip the size of its text, not the column's */
+.mm-fact dd.mm-tag {
+  display: inline-block;
+  width: fit-content;
+}
+
+/* declared capability words */
+.mm-chips {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mm-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: var(--radius-s);
+  font-size: var(--text-meta);
+  color: var(--s-text-2);
+  border: 1px solid var(--s-border);
+  background: var(--s-bg-inset);
+}
+/* A genuine capability carries a quiet accent tint; a mode word (how the
+   model treats thinking) stays neutral. The text mixes toward --s-text
+   rather than sitting on the raw accent, which measures under AA on the
+   light theme at this size. */
+.mm-chip.cap {
+  color: color-mix(in srgb, var(--s-accent) 55%, var(--s-text));
+  border-color: color-mix(in srgb, var(--s-accent) 30%, var(--s-border));
+  background: color-mix(in srgb, var(--s-accent) 8%, var(--s-bg-inset));
+}
+/* The same "this is a real capability" tint, on the micro badge that rides
+   beside a tag in the COLLAPSED row (vision). Borrowed from .mm-chip.cap
+   rather than restated at another strength, so one capability does not read
+   as two different kinds of fact depending on whether the card is open. */
+.badge.cap {
+  color: color-mix(in srgb, var(--s-accent) 55%, var(--s-text));
+  border-color: color-mix(in srgb, var(--s-accent) 30%, var(--s-border));
+  background: color-mix(in srgb, var(--s-accent) 8%, var(--s-bg-inset));
+}
+
+/* The overline that names a body zone, in the fact-label voice, so the
+   check story reads as one labelled block apart from the declared facts. */
+.mm-overline {
+  font-size: var(--text-micro);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--s-text-3);
+}
+.mm-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--s-border);
+  padding-top: 12px;
+}
+
+/* A remembered partial download: the frozen bar plus its sentence. */
+.mm-partial {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Measured facts read as facts with their provenance. The unmeasured
+   case reads at the same size and in the same place - an honest word,
+   never a gap. */
+.mm-measured {
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+  line-height: 1.5;
+}
+
+/* A think-mode disagreement: the sentence, what is already happening to
+   turns, and the one action that settles it - grouped so the button reads
+   as belonging to the note above it rather than to the zone's own verbs.
+   `align-items: start` keeps the button at its own width; stretched across
+   the zone it would outweigh the warning it answers. */
+.mm-thinknote {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 6px;
+}
+
+.mm-agency {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-left: 2px solid var(--s-border-strong);
+  padding-left: 10px;
+}
+/* Verbs inside the stacked zones size to their label like every other console
+   button; the flex column would otherwise stretch them to the row's width and
+   let a routing verb outweigh the primary Run check. */
+.mm-zone > .btn,
+.mm-agency > .btn {
+  align-self: flex-start;
+}
+/* The verdict block is a quotation from the resolution, so it keeps the rule
+   down its left edge - but its own contents no longer need the column gap the
+   old stacked line wanted. */
+.mm-agency {
+  gap: 6px;
+}
+/* The ANSWER, on its own line and in the body's own size: what this model
+   runs at. It replaced a compact triplet that put three resolution inputs and
+   the answer in one run of text, where the reader had to do the min()
+   themselves to find out what actually happens.
+
+   Not `strong` and not a heading: the mode word is a value, and bolding a
+   lowercase word like "assisted" mid-sentence read as emphasis rather than as
+   the field it is. A row of its own does the job that weight was doing. */
+.mm-verdict {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-label);
+  font-weight: 600;
+  color: var(--s-text);
+}
+/* Steps back from the verdict without becoming fine print - it is the
+   sentence that makes the word above mean something, so it reads at the same
+   tier as any other explanatory line in the zone. */
+.mm-verdict-gloss {
+  font-size: var(--text-meta);
+  line-height: 1.55;
+  color: var(--s-text-2);
+}
+
+/* The zone's one action row, at its foot. Everything in it acts on the check
+   story above - the two verbs that measure beside the one that decides - so
+   they sit together rather than scattered between the notes they follow. */
+.mm-zone-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  /* A little air after the last sentence: the buttons end the zone, and at the
+     column gap alone they crowded the clamp explanation above them. */
+  margin-top: 2px;
+}
+/* The housekeeping foot: the verbs that maintain the weights (update,
+   delete - benign before destructive), apart from the actions that only
+   measure things. */
+.mm-danger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  border-top: 1px solid var(--s-border);
+  padding-top: 12px;
+}
+/* The stated reason a control is refused, at the 4.5:1 text tier: it is
+   load-bearing prose, not decoration, and it is the only thing on the
+   row saying why the button beside it does nothing. */
+.mm-reason {
+  flex: 1 1 16rem;
+  min-width: 0;
+  font-size: var(--text-meta);
+  color: var(--s-text-2);
+  line-height: 1.5;
+}
+
+/* ---------- the activity panel ---------- */
+[data-part="mm-activity"] {
+  /* positioned: the theme's running tell rides the panel's own pseudos */
+  position: relative;
+  animation: enter var(--dur-slow) var(--ease-entrance);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-m);
+  clip-path: var(--clip-panel);
+  background: var(--c-tool-bg);
+  padding: 14px 16px 15px;
+}
+.mm-activity-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.mm-activity-title {
+  font-size: var(--text-title);
+  font-weight: 600;
+  color: var(--s-text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mm-activity-verbs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The clicked row's own live readout: the action slot morphs into a
+   tabular percent over a hairline of the same accent the panel's bar
+   uses, so the feedback lands where the click did. Activating it brings
+   the full panel into view. */
+.mm-pullmini {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 5px;
+  width: 6rem;
+  min-height: 40px;
+  padding: 6px 8px;
+  border-radius: var(--radius-s);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--s-text);
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.mm-pullmini:hover {
+  background: color-mix(in srgb, var(--s-text) 6%, transparent);
+}
+.mm-minibar {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  /* 40%: at 25% the track vanished against the row, and a fill with no
+     visible track reads as a dash, not a fraction. */
+  background: color-mix(in srgb, var(--s-text-3) 40%, transparent);
+  overflow: hidden;
+}
+.mm-minibar i {
+  display: block;
+  height: 100%;
+  /* Explicitly zero. A block-level fill with no width resolves to AUTO, which
+     fills its track - so a bar whose width is omitted because the fraction is
+     unknown rendered as 100%, saying "finished" at the one moment nothing has
+     started. The indeterminate rule below is what says "unknown" instead. */
+  width: 0;
+  border-radius: 2px;
+  background: var(--s-accent);
+  /* a frame lands every second or so; the fill glides between them */
+  transition: width 900ms var(--ease-standard);
+}
+
+/* Download progress: an inset track with an accent fill. The width
+   transitions rather than jumping, and the base sheet's reduced-motion
+   blanket collapses that to instant. */
+.mm-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--s-bg-inset);
+  overflow: hidden;
+}
+.mm-bar i {
+  display: block;
+  height: 100%;
+  /* Zero by default - see .mm-minibar i above for why auto is a trap here. */
+  width: 0;
+  border-radius: 3px;
+  background: var(--s-accent);
+  transition: width 900ms var(--ease-standard);
+}
+
+/* A fraction nobody can state yet, said as one rather than guessed at. Both
+   ends of a check have a real wait behind them (the model is unloaded and
+   cold-loaded before sample one), and neither 0% nor 100% is true there - so
+   the track carries a moving stripe instead of a value.
+
+   The texture is legible with motion or without: the base sheet's
+   reduced-motion blanket kills the animation, and a static barber pole still
+   reads as "no value here" rather than as a number.
+
+   Full accent ink, quiet by COVERAGE (5px of 14) rather than alpha: the
+   stripe must clear the 3:1 non-text floor against the track in every theme,
+   and a diluted mix does not on minimal light - where, under reduced motion,
+   this static texture is the only thing separating "working" from an empty
+   0% track. */
+.mm-bar.indeterminate,
+.mm-minibar.indeterminate {
+  position: relative;
+}
+/* The stripe is a STATIC overlay panned by transform, never an animated
+   background-position: the browser rasterizes a repeating gradient into a
+   finite tile, and this pattern's true horizontal period (~15.4469px) fits
+   no whole-pixel tile - under a position animation the mismatch surfaces as
+   a seam that TRAVELS the bar, chopping each stripe as it passes (observed
+   live). A transform slides one pre-painted layer with subpixel
+   compositing, so nothing re-rasterizes per frame and no seam exists. The
+   layer overdraws one period leftward so the pan never exposes bare track;
+   the wrap error (15.45px stated vs the true period) is 0.003px per loop -
+   invisible. The parent's overflow: hidden clips the overhang. */
+.mm-bar.indeterminate::after,
+.mm-minibar.indeterminate::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 0 -15.45px;
+  background-image: repeating-linear-gradient(
+    115deg,
+    var(--s-accent) 0 5px,
+    transparent 5px 14px
+  );
+  animation: mm-indeterminate 900ms linear infinite;
+}
+@keyframes mm-indeterminate {
+  to {
+    transform: translateX(15.45px);
+  }
+}
+
+/* one finished check sample per line: the glyph, the case and its word,
+   and at the right its time (or, for a failure, the backend's reason) */
+.mm-cases {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: var(--text-label);
+}
+.mm-case {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  animation: enter var(--dur-base) var(--ease-entrance);
+}
+.mm-case-glyph {
+  width: 14px;
+  height: 14px;
+}
+.mm-case.pass .mm-case-glyph,
+.mm-case.pass .mm-case-word {
+  color: var(--s-ok);
+}
+/* the reason a sample failed is the backend's own sentence: read at the
+   note tier, never the meta tier (which misses AA on minimal light) */
+.mm-case.fail .mm-case-detail {
+  color: var(--s-text-2);
+}
+.mm-case.fail .mm-case-glyph,
+.mm-case.fail .mm-case-word {
+  color: var(--s-danger);
+}
+.mm-case-name {
+  color: var(--s-text);
+}
+.mm-case-word {
+  font-size: var(--text-meta);
+  font-weight: 500;
+  margin-left: 8px;
+}
+.mm-case-detail {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+  color: var(--s-text-3);
+  text-align: right;
+}
+/* What a case means, once, above its samples. */
+.mm-case-gloss {
+  font-size: var(--text-meta);
+  color: var(--s-text-3);
+  margin: 4px 0 1px;
+}
+
+/* The verdict's per-case tallies: a self-sizing row of mono chips, the
+   count set apart from the name. */
+.mm-tallies {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mm-tally {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+  color: var(--s-text-2);
+  border-radius: 6px;
+  background: var(--s-bg-inset);
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+.mm-tally b {
+  font-weight: 500;
+  color: var(--s-text);
+}
+
+/* ---------- the free-text pull box ---------- */
+.mm-addbox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.mm-input {
+  flex: 1;
+  /* 14rem: under it the input shares a line with Check availability at 390
+     and Pull orphans onto a third */
+  min-width: 14rem;
+  min-height: 40px;
+  background: var(--c-input-bg, var(--s-bg-inset));
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-s);
+  padding: 0 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  color: var(--s-text);
+  transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast);
+}
+.mm-input::placeholder {
+  color: var(--s-text-3);
+  font-family: var(--font-mono);
+}
+.mm-input:focus {
+  outline: none;
+  border-color: var(--s-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--s-accent) 15%, transparent);
+}
+.mm-preflight {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mm-preflight strong {
+  color: var(--s-text);
+  font-weight: 600;
+}
+
+/* ---------- shared notes ---------- */
+/* Inline notes: neutral by default, colored for outcomes (color + the
+   wording, never color alone). */
+.mm-note {
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.mm-note.ok {
+  color: var(--s-ok);
+}
+.mm-note.warn {
+  color: var(--s-warn);
+}
+.mm-note.error {
+  color: var(--s-danger);
+}
+/* A line of figures (the runtime's version, a percent, a sample count):
+   the mono, tabular, so the digits stand still as they change. */
+.mm-meta {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-variant-numeric: tabular-nums;
+  color: var(--s-text-2);
+}
+.mm-hint {
+  font-size: var(--text-meta);
+  color: var(--s-text-3);
+  line-height: 1.5;
+  max-width: 60ch;
+}
+/* A hint that is the backend's ONLY explanation of a state (a clamp's
+   reason, a preflight's detail) is load-bearing: the 4.5:1 tier, not the
+   decorative one - minimal's text-3 measures under AA at this size. Same
+   split the integrations page records for its disabled-choice reasons. */
+.mm-hint.reason {
+  color: var(--s-text-2);
+}
+/* the panel is its own measure; a hint there runs its full width */
+[data-part="mm-activity"] .mm-hint {
+  max-width: none;
+}
+.mm-muted {
+  font-size: var(--text-meta);
+  color: var(--s-text-3);
+}
+
+/* Page-level banner: the stranded-vectors alarm, the quiet leftovers
+   note, and a failed page load. A shape, not only a hue - forced-colors
+   modes drop border-color, and the three would otherwise be identical
+   boxes; the wording carries the meaning on its own either way. */
+.mm-banner {
+  border: 1px solid var(--s-border);
+  border-left-width: 3px;
+  border-radius: var(--radius-m);
+  background: var(--s-bg-inset);
+  padding: 10px 14px;
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+  line-height: 1.55;
+}
+.mm-banner.warn {
+  border-color: var(--s-warn);
+  color: var(--s-text);
+}
+.mm-banner.error {
+  border-color: color-mix(in srgb, var(--s-danger) 40%, var(--s-border));
+  background: color-mix(in srgb, var(--s-danger) 6%, var(--s-bg-app));
+  color: var(--s-danger);
+}
+
+/* A role gap: what this server's inventory cannot do, and what would close
+   it. The banner supplies the box (and its tone); this supplies the stack
+   inside it - a scan line, the backend's full sentence, and the tag that
+   closes the gap when exactly one does.
+
+   The severity hue lands on the TITLE alone. .mm-banner.error colors
+   everything it holds, which is right for a one-line page error and wrong
+   for a paragraph naming three broken features: the words are what carry
+   the meaning, and they have to stay readable to do it. */
+.mm-gap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mm-gap-title {
+  font-size: var(--text-title);
+  font-weight: 600;
+  color: var(--s-text);
+}
+.mm-banner.error .mm-gap-title {
+  color: var(--s-danger);
+}
+/* Re-asserted, not inherited: without this the body would take the banner's
+   danger color from the rule above. */
+.mm-banner.error .mm-gap-body {
+  color: var(--s-text);
+}
+.mm-gap-fix {
+  font-size: var(--text-meta);
+  color: var(--s-text-2);
+}
+
+/* ---------- the workspace defaults page ----------
+
+   The console's third section, and the first that is a FORM rather than a
+   grid of what the backend already knows. It borrows its siblings'
+   page-level vocabulary outright - the title, the section heading, the
+   note/hint/banner tiers, the action row, the state pill, and the switch
+   from the integrations sheet - because the console amendment asks the
+   sections to read as one surface, and a third set of near-identical type
+   rules would be that surface arguing with itself. What is new is only
+   what a form needs: a labelled field, an input, a select, and the row
+   that pairs a switch with the word beside it. */
+[data-part="workspace-defaults"] {
+  width: 100%;
+  /* the console's shared measure, set by the manager grid */
+  max-width: 52rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.wd-headline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* The one paragraph that decides whether the page is understood: it says
+   these are FALLBACKS, not overrides. At the 4.5:1 tier for that reason -
+   load-bearing prose, not decoration. */
+.wd-lede {
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+  line-height: 1.6;
+  max-width: 60ch;
+}
+
+.wd-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.wd-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--s-border);
+  border-radius: var(--radius-m);
+  clip-path: var(--clip-panel);
+  background: var(--c-tool-bg);
+  padding: 16px;
+}
+
+/* Label text above its control, the shape the integrations form uses. Its
+   own measure inside the 52rem column, at the column's left edge: a select
+   stretched across the full grid width reads worse, not better. */
+.wd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 36rem;
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+}
+/* The same label voice for a field whose control cannot be reached by
+   clicking the label: the switch is its own button, and wrapping it in a
+   <label> would make one click toggle it twice. */
+.wd-field-label {
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+}
+
+/* The CLOSED control only. What the open list looks like is the shared
+   base-select recipe in themes/chat.css (the `@supports selector(::picker
+   (select))` block), which this page joins by selector rather than by
+   restating: globals.css loads that sheet on every route, so a second copy
+   here would be two recipes to keep in step. The trigger below deliberately
+   matches that block's other wearer - the delete dialog's select - token for
+   token, so the two read as one control in two places. */
+.wd-input,
+.wd-select,
+.wd-textarea {
+  width: 100%;
+  /* Above the console's 40px interactive floor. A select computes a shorter
+     intrinsic line than an input, so both are pinned rather than left to
+     padding - the same 42px the delete dialog's select settled on. */
+  min-height: 42px;
+  background: var(--s-bg-app);
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-m);
+  padding: 9px 12px;
+  font-size: var(--text-label);
+  color: var(--s-text);
+  transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast);
+}
+.wd-select {
+  cursor: pointer;
+}
+/* The one multi-line control on the page. It wears the input's box exactly -
+   same tokens, same focus ring - and differs only where a paragraph differs
+   from a line: it opens at three rows of the 42px cadence so a persona is
+   visibly a piece of PROSE rather than a name, it takes the hint's line-height
+   so several lines read as text, and it grows downward under the reader's
+   hand. Vertical only: horizontal resize would break the 36rem field measure
+   the rest of the column is set to.
+
+   Inheriting the family is not decoration here - a bare <textarea> falls back
+   to the UA monospace face, which would leave this the one control on the page
+   not speaking the console's voice. The size comes from the shared rule above,
+   so only the family has to be reclaimed. */
+.wd-textarea {
+  min-height: 126px;
+  font-family: inherit;
+  line-height: 1.55;
+  resize: vertical;
+}
+/* Model TAGS read in the monospace face everywhere else in the console, so
+   they do here; the enum selects keep the UI face, because their options
+   are sentences rather than identifiers. */
+.wd-select-mono {
+  font-family: var(--font-mono);
+}
+.wd-input::placeholder,
+.wd-textarea::placeholder {
+  color: var(--s-text-3);
+}
+.wd-input:focus,
+.wd-select:focus,
+.wd-textarea:focus {
+  outline: none;
+  border-color: var(--s-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--s-accent) 15%, transparent);
+}
+.wd-input:disabled,
+.wd-select:disabled,
+.wd-textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Two controls under one label, for the one field that has a shortcut beside
+   it. The input holds the value; the select only fills it in, so the input
+   takes every bit of free room and the select takes a fixed share. They WRAP
+   before they shrink - a squeezed select truncates "16 GB card - 32,768" to
+   something that identifies nothing, and the number is the whole point of the
+   label. */
+.wd-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.wd-field-row > .wd-input {
+  flex: 1 1 9rem;
+  width: auto;
+  min-width: 0;
+}
+/* A DECLARED basis, not `auto`, and the reason is base-select. The customized
+   control renders only the SELECTED option, so its intrinsic width tracks the
+   choice - "Custom" and "16 GB card - 32,768" size differently, and an auto
+   basis would resize the select on every pick and shove the number field
+   sideways with it. A native popup sizes to the widest option instead, so an
+   auto basis would also have the two engines disagreeing. 13rem holds the
+   longest label at this face and size. */
+.wd-field-row > .wd-select {
+  flex: 0 1 13rem;
+  width: auto;
+  min-width: 0;
+}
+
+/* The switch never stands alone: aria-checked is not a visible label, and a
+   36x20 pill with nothing beside it leaves the reader to infer which end is
+   on. The row carries the interactive floor the pill itself is under. */
+.wd-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+}
+.wd-toggle-word {
+  font-size: var(--text-label);
+  color: var(--s-text);
+}
+
+/* Hints sit under their control rather than beside it, so the field keeps
+   its narrow measure while the explanation keeps a readable line. At the
+   4.5:1 tier throughout: on this page a hint is the ONLY statement of what
+   a control does, which is the split .mm-hint.reason records. */
+.wd-hint {
+  font-size: var(--text-meta);
+  color: var(--s-text-2);
+  line-height: 1.55;
+  max-width: 62ch;
+}
+
+/* ---------- the members page ----------
+   A roster is a plainer thing than the model grid: nothing here expands,
+   and each row carries one control. So it takes the same card anatomy
+   (border, panel tint, rounded, clip-path) without the summary button or
+   the state-pill column - the identity on the left, the one control in a
+   right cluster, and an explanation beneath when the control is fixed.
+
+   Same rules as the rest of this sheet: tier-2 (--s-*) and tier-3 (--c-*)
+   tokens only, the shared .btn / .badge / .pill-label primitives, and the
+   mm- notes above for banners and asides. */
+[data-part="members"] {
+  width: 100%;
+  /* The model manager's measure, so the two console pages share a column
+     and the rail does not appear to move between them. */
+  max-width: 52rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mbr-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+/* What the two roles actually buy, once, at the top - rather than a
+   tooltip per row repeating it. The AA text tier: this is the page's
+   only explanation of the thing it exists to change. */
+.mbr-lede {
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+  line-height: 1.6;
+  /* 60ch, the console's one prose measure (.wd-lede, .mm-hint). */
+  max-width: 60ch;
+}
+
+.mbr-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* GRID, not a wrapping flex row, and the choice is load-bearing. In flex,
+   an item's own max-width caps its size during LINE BREAKING (the spec's
+   hypothetical main size), so the fixed-role note below - 62ch, meant to
+   fill a line of its own - measured narrow enough to FIT beside the role
+   cluster, its flex-basis never forced the wrap, and the identity column
+   (basis 0) was left the scraps: 16px, one letter per line. A grid span
+   is declarative - the note always gets its full-width row, and its
+   measure caps only itself. */
+.mbr-row {
+  display: grid;
+  /* minmax(0, 1fr): the identity column may wrap its text but can never
+     be squeezed out of existence by its neighbours. */
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--s-border);
+  border-radius: var(--radius-m);
+  clip-path: var(--clip-panel);
+  background: var(--c-tool-bg);
+}
+.mbr-identity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mbr-name {
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--s-text);
+  overflow-wrap: anywhere;
+}
+/* An address is an exact string that gets compared and typed, so it reads
+   in the monospace face - the same reasoning as .mm-tag. */
+.mbr-email {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  color: var(--s-text-2);
+  overflow-wrap: anywhere;
+}
+
+.mbr-control {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+select.mbr-role {
+  /* 42px with 9px block padding - the console control idiom (.wd-select and
+     the dialog select ship the same pin), not merely the dossier's 40px
+     floor: the same control must not be 2px shorter one rail click away. */
+  min-height: 42px;
+  min-width: 9.5rem;
+  background: var(--s-bg-app);
+  border: 1px solid var(--s-border-strong);
+  border-radius: var(--radius-m);
+  padding: 9px 12px;
+  font-size: var(--text-label);
+  color: var(--s-text);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast);
+}
+/* :focus, not :focus-visible - .wd-select set the console's convention one
+   rail entry away, and one surface picks one trigger. */
+select.mbr-role:focus {
+  outline: none;
+  border-color: var(--s-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--s-accent) 15%, transparent);
+}
+/* A fixed role still has to READ, so this keeps the AA text tier and
+   marks itself inert with the cursor and a softened frame rather than by
+   fading the word below the contrast floor. */
+select.mbr-role:disabled {
+  cursor: not-allowed;
+  border-color: var(--s-border);
+  background: var(--s-bg-inset);
+}
+
+/* The reason a control is inert, on its own line beneath the whole row:
+   it is a sentence, and squeezed into the right cluster it would push the
+   select out of the column every other row lines up in. */
+.mbr-fixed {
+  grid-column: 1 / -1;
+  font-size: var(--text-meta);
+  color: var(--s-text-2);
+  line-height: 1.5;
+  max-width: 60ch;
+}
+
+/* Narrow: one column, so the role cluster drops under the identity
+   instead of squeezing it. */
+@media (max-width: 560px) {
+  .mbr-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .mbr-control {
+    justify-self: stretch;
+    justify-content: space-between;
+  }
+}
+
+/* ---------- the knowledge page ----------
+   The workspace corpus: one row per stored source, plus the control that
+   adds a new one. The row anatomy is the members roster's - identity on
+   the left, a state pill and its verb in a right cluster, full-width
+   detail beneath - because the questions are the same shape: what is
+   this, and is it working. The detail row reuses the .mm-fact PAIR
+   verbatim and gives it its own grid (.kb-facts): the same label-over-
+   value cell, in a narrower track that spans the row and is ruled off
+   from the summary above it.
+
+   Same rules as the rest of this sheet: tier-2 (--s-*) and tier-3 (--c-*)
+   tokens only, the shared .btn / .btn-danger-ghost primitives, the mm-
+   state pills, and the mm- notes above for banners and asides. */
+[data-part="knowledge"] {
+  width: 100%;
+  /* The model manager's measure, so the console pages share a column and
+     the rail does not appear to move between them. */
+  max-width: 52rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.kb-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+/* What this corpus IS, and what removing something costs - once, at the
+   top. The AA text tier: on this page it is the only statement of either. */
+.kb-lede {
+  font-size: var(--text-label);
+  color: var(--s-text-2);
+  line-height: 1.6;
+  /* 60ch, the console's one prose measure (.wd-lede, .mbr-lede). */
+  max-width: 60ch;
+}
+
+/* The add control. The same flex shape as .mm-addbox, except the progress
+   line wraps to a row of its own rather than squeezing in beside the
+   button: it is a sentence, and it appears exactly when the button has
+   stopped being the interesting thing on that line. */
+.kb-addbox {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+/* Driven by the button beside it, never shown: a file input cannot be
+   styled to the console's control height, and a hidden-but-focusable one
+   would put a second tab stop on the same action. display: none takes it
+   out of the tab order along with the box. */
+.kb-file {
+  display: none;
+}
+/* A wait with no fraction to state, said as one: the indeterminate track
+   plus a sentence naming the file. Full width, so the sentence keeps a
+   readable line under the button that started it. */
+.kb-progress {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-meta);
+  color: var(--s-text-2);
+  line-height: 1.5;
+}
+.kb-progress .mm-bar {
+  flex: 0 0 7rem;
+}
+
+.kb-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* GRID rather than a wrapping flex row, for the reason .mbr-row records:
+   the full-width rows below are meant to have a line to themselves, and
+   in flex an item's own max-width caps it during line BREAKING, so such a
+   row measures narrow enough to fit beside the control cluster and leaves
+   the identity column one letter per line. A grid span is declarative. */
+.kb-row {
+  display: grid;
+  /* minmax(0, 1fr): the identity column may wrap but can never be squeezed
+     out of existence by its neighbours. */
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--s-border);
+  border-radius: var(--radius-m);
+  clip-path: var(--clip-panel);
+  background: var(--c-tool-bg);
+}
+.kb-identity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+/* A filename is somebody else's string and may be long with no spaces in
+   it, so it wraps anywhere rather than widening the row. */
+.kb-name {
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--s-text);
+  overflow-wrap: anywhere;
+}
+
+.kb-control {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* The provenance: what was stored, how much of it, and by which model.
+   Full width beneath the summary, on the shared fact grid. */
+.kb-facts {
+  grid-column: 1 / -1;
+  display: grid;
+  /* 11rem, the same track .mm-facts uses, because it is the same cell: at
+     the console's shared 52rem column a 9rem track wrapped an embedding tag
+     mid-string in the very column built to show it, while the manager grid
+     rendered the same tag whole one rail click away. The console has one
+     fact rhythm and this is it. */
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 10px;
+  border-top: 1px solid var(--s-border);
+  padding-top: 10px;
+}
+/* Exact strings that get compared and typed - a model tag, a fingerprint -
+   read in the monospace face, the same reasoning as .mm-tag. */
+.kb-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  overflow-wrap: anywhere;
+}
+
+/* A web source's own link, on a line of its own: it is a URL, so it needs
+   the full width and has to be able to break anywhere. */
+.kb-link {
+  grid-column: 1 / -1;
+  font-size: var(--text-meta);
+  overflow-wrap: anywhere;
+}
+.kb-link a {
+  color: var(--s-accent);
+}
+
+/* Narrow: one column, so the control cluster drops under the identity
+   instead of squeezing it - the same fold .mbr-row takes. */
+@media (max-width: 560px) {
+  .kb-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .kb-control {
+    justify-self: stretch;
+    justify-content: space-between;
+  }
+}

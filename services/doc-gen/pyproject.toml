@@ -1,0 +1,53 @@
+[project]
+name = "doc-gen"
+version = "0.1.0"
+description = "Streamable-HTTP MCP server that renders structured JSON into real document and chart files."
+requires-python = ">=3.13"
+dependencies = [
+    "mcp>=1.28,<2",
+    # Imported directly (the parent app, routing, middleware, the spec models),
+    # so declared directly rather than leaned on as transitive dependencies of
+    # mcp.
+    "pydantic>=2",
+    "starlette>=0.40",
+    "uvicorn>=0.32",
+    # The renderers. Major ceilings on all four: each owns a file format whose
+    # writer API is what this service is built on, so a major bump is a thing to
+    # read release notes for, not to pick up silently on a rebuild.
+    "openpyxl>=3.1,<4",
+    "python-docx>=1.1,<2",
+    "reportlab>=4.2,<5",
+    "matplotlib>=3.9,<4",
+]
+
+[dependency-groups]
+dev = [
+    "anyio>=4",
+    "httpx>=0.28",
+    "pytest>=8.3",
+    # Reads back the generated PDFs with a library that did not write them, so a
+    # round-trip test cannot pass on reportlab agreeing with itself.
+    "pypdf>=6.21.4",
+    "ruff>=0.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "SIM", "C4", "D"]
+ignore = ["D100", "D104", "D107", "D203", "D213", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

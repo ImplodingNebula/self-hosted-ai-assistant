@@ -1,0 +1,2767 @@
+<!doctype html>
+<html lang="en" data-stars="all" data-theme="aurora" data-mode="dark" data-sky="shader" data-prose="serif" data-side="shade" data-surface="glass">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aurora (next) - design prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
+<style>
+/* =====================================================================
+   Aurora - the adopted reference (DESIGN.md, amendment of 2026-10-09).
+   This file wins over aurora.html wherever the two overlap; aurora.html
+   stays as the skeleton the other themes derive from. The harness keeps
+   the comparisons the review was made with (sky renderer, constellations,
+   sidebar fill, surfaces, answer face); the root attributes above are the
+   adopted defaults.
+
+   What changes against the current skeleton:
+     - The assistant turn is a timeline, not a stack of cards. A rail on
+       the left carries elapsed time and one glyph per step (thought,
+       tool, answer, end); thinking and tool calls are inline rows.
+     - The answer has no card. It sits in one calm reading column.
+     - A reply ends with a footer: sources, copy, model, tokens, speed.
+     - Code blocks are a component: language label, copy, syntax colour.
+     - Model load state is designed: a status chip, a "waiting for the
+       model" row, and a notice docked to the composer.
+     - The aurora is a real sky. It sits in the margins, takes the colour
+       of the step that is running, and rests when nothing is happening.
+
+   What does not change: the token tiers, the data-part hooks, the state
+   machine, the motion tokens, the reduced-motion law.
+
+   Sections:
+     1. Reset + base
+     2. TOKENS
+     3. Layout
+     4. Message anatomy
+     5. Composer
+     6. States
+     7. Reduced motion / reduced transparency
+     8. THEME FLOURISH LAYER (aurora)
+     9. Prototype harness chrome (not part of the app design)
+   The app serves its fonts locally; this file loads them from a font
+   CDN and falls back to system stacks when offline.
+   ===================================================================== */
+
+/* ---------- 1. Reset + base ---------- */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font-ui);
+  background: var(--c-app-bg, var(--s-bg-app));
+  color: var(--s-text);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: color-mix(in srgb, var(--s-accent) 30%, transparent); color: var(--s-text); }
+:focus-visible { outline: 2px solid var(--s-focus); outline-offset: 2px; border-radius: 4px; }
+svg.i { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor;
+  stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ---------- 2. TOKENS ---------- */
+/* Aurora: a deep indigo night with a sky in the margins. Dark only.
+   Contrast on the reading column (#0b0d20 under a 90% veil):
+   text 16.8:1, text-2 9.0:1, text-3 5.4:1, on-accent 9.8:1. */
+:root {
+  /* tier 1 - primitives */
+  --p-night-0: #0b0d20; --p-night-1: #12152e; --p-night-2: #191d3c; --p-night-3: #060812;
+  --p-star-0: #edeff9; --p-star-1: #a9b0d4; --p-star-2: #7e86b0;
+  --p-aurora-violet: #9a8afb;
+  --p-aurora-teal: #45e0c8; --p-aurora-teal-bright: #6ceedd;
+  --p-aurora-magenta: #ea7fdc;
+
+  /* tier 2 - semantic */
+  --s-bg-app: var(--p-night-0);
+  --s-bg-panel: var(--p-night-1);
+  --s-bg-raised: var(--p-night-2);
+  --s-bg-inset: var(--p-night-3);
+  --s-text: var(--p-star-0);
+  --s-text-2: var(--p-star-1);
+  --s-text-3: var(--p-star-2);
+  --s-text-inverse: #0b0d20;
+  --s-accent: var(--p-aurora-teal);
+  --s-accent-hover: var(--p-aurora-teal-bright);
+  --s-on-accent: #04261f;
+  --s-info: #6f9cf2; --s-ok: #5fe0a0; --s-warn: #efb964; --s-danger: #f0718a;
+  --s-border: rgba(255, 255, 255, .09);
+  --s-border-strong: rgba(255, 255, 255, .16);
+  --s-focus: var(--p-aurora-teal);
+  --s-on-status: var(--s-text-inverse);
+  --s-scrim: rgba(0, 0, 0, .4);
+  --s-shadow: rgba(2, 4, 14, .5);
+
+  /* tier 3 - component */
+  --c-bubble-user-bg: color-mix(in srgb, var(--p-aurora-teal) 11%, var(--p-night-1));
+  --c-bubble-user-fg: var(--s-text);
+  --c-citation-bg: var(--s-bg-panel);
+  --c-code-bg: #080a1a;
+  --c-code-fg: #dfe4f5;
+  --c-code-com: #7e86b0;
+  --c-code-key: #9a8afb;
+  --c-code-str: #6ceedd;
+  --c-code-num: #efb964;
+  --c-code-fn: #ea7fdc;
+  /* step colours: what kind of work a step is (rail glyph, and the sky) */
+  --c-step-thought: var(--p-aurora-violet);
+  --c-step-tool: var(--p-aurora-teal);
+  --c-step-confirm: var(--p-aurora-magenta);
+  --c-step-answer: var(--s-text-2);
+  --c-step-error: var(--s-danger);
+
+  /* shape + motion */
+  --radius-s: 8px; --radius-m: 12px; --radius-l: 16px; --radius-bubble: 14px;
+  --dur-fast: 120ms; --dur-base: 200ms; --dur-slow: 320ms;
+  --ease-standard: cubic-bezier(.4, 0, .2, 1);
+  --ease-entrance: cubic-bezier(.16, 1, .3, 1);
+  --font-ui: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-prose: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+  --font-mono: "Geist Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  --text-body: 16.5px; --lh-body: 1.68;
+
+  /* skeleton metrics */
+  --rail-time: 40px; --rail-glyph: 20px; --rail-gap: 12px; --step-gap: 14px;
+  /* the reading column is as wide as the composer; the rail (left) and the
+     user's clock time (right) hang outside it in equal gutters */
+  --col: 50rem; --gutter: calc(var(--rail-time) + var(--rail-glyph) + 2 * var(--rail-gap));
+  --hit: 40px;
+}
+html[data-prose="sans"] { --font-prose: var(--font-ui); --text-body: 15.5px; --lh-body: 1.75; }
+
+/* ---------- 3. Layout ---------- */
+.app { position: relative; z-index: 1; display: flex; height: 100%; }
+
+[data-part="sidebar"] {
+  width: 272px; flex-shrink: 0;
+  background: var(--c-sidebar-bg, var(--s-bg-panel));
+  border-right: 1px solid var(--s-border);
+  display: flex; flex-direction: column;
+  padding: 12px 10px;
+}
+.brand { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 8px;
+  font-size: 14px; font-weight: 600; }
+.brand svg { color: var(--s-accent); }
+.new-chat {
+  display: flex; align-items: center; gap: 8px; margin: 8px 0 4px;
+  min-height: var(--hit); padding: 0 12px; border-radius: var(--radius-s);
+  border: 1px solid var(--s-border-strong); font-size: 13px; font-weight: 500;
+  transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast);
+}
+.new-chat:hover { background: var(--s-bg-raised); }
+.side-scroll { flex: 1; overflow-y: auto; min-height: 0; margin: 0 -4px; padding: 0 4px; }
+.side-label { font-size: 12px; font-weight: 500; color: var(--s-text-3); padding: 16px 10px 4px; }
+.convo {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  min-height: var(--hit); padding: 0 10px; border-radius: var(--radius-s);
+  font-size: 13px; color: var(--s-text-2);
+  transition: background var(--dur-fast) var(--ease-standard), color var(--dur-fast);
+}
+.convo span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.convo svg { width: 13px; height: 13px; color: var(--s-text-3); }
+.convo:hover { background: var(--s-bg-raised); color: var(--s-text); }
+.convo[aria-current="true"] { background: var(--s-bg-raised); color: var(--s-text); font-weight: 500; }
+.side-foot { border-top: 1px solid var(--s-border); padding-top: 8px; margin-top: 8px; }
+
+.main { position: relative; flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+[data-part="topbar"] {
+  position: relative; height: 48px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 10px; padding: 0 16px 0 12px;
+  border-bottom: 1px solid var(--s-border);
+}
+.icon-btn { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-s); color: var(--s-text-2); position: relative;
+  transition: background var(--dur-fast), color var(--dur-fast); }
+.icon-btn::after { content: ""; position: absolute; inset: -4px; }
+.icon-btn:hover { background: var(--s-bg-raised); color: var(--s-text); }
+.title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* model status: which model, and where it is right now */
+[data-part="model-status"] {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--s-text-2); white-space: nowrap;
+}
+[data-part="model-status"] .ms-name { font-family: var(--font-mono); color: var(--s-text); }
+.ms-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--s-ok); }
+[data-model-state="disk"] .ms-dot { background: none; box-shadow: inset 0 0 0 1.5px var(--s-text-3); }
+[data-model-state="loading"] .ms-dot { display: none; }
+[data-part="model-status"] .t-matrix { display: none; }
+[data-model-state="loading"] .t-matrix { display: grid; }
+
+/* the lower edge fades out, so content dissolves before the composer
+   instead of being cut by it. A mask (not a painted gradient) keeps the
+   sky showing through. */
+[data-part="thread"] { position: relative; flex: 1; overflow-y: auto; padding: 28px 20px 44px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 44px), rgba(0, 0, 0, .35) calc(100% - 12px), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 44px), rgba(0, 0, 0, .35) calc(100% - 12px), transparent 100%);
+  scrollbar-width: thin; scrollbar-color: var(--s-border-strong) transparent; }
+.thread-inner { max-width: calc(var(--col) + 2 * var(--gutter)); margin: 0 auto; display: flex; flex-direction: column; gap: 30px; }
+
+/* ---------- 4. Message anatomy ---------- */
+/* Every row of a turn shares one grid: time | glyph | body. */
+.step {
+  display: grid; column-gap: var(--rail-gap); padding-right: var(--gutter);
+  grid-template-columns: var(--rail-time) var(--rail-glyph) minmax(0, 1fr);
+  --row-lh: 20px;   /* the row's first line: the time and the glyph centre on it */
+}
+/* rail times are elapsed since the question (+6s); the user's is a clock time */
+.step-time { font-family: var(--font-mono); font-size: 11px; line-height: var(--row-lh); color: var(--s-text-3);
+  text-align: right; font-variant-numeric: tabular-nums; }
+.step-glyph { position: relative; display: flex; justify-content: center; height: 100%; color: var(--step-c, var(--s-text-3)); }
+/* a shade heavier than the chrome's icons: one small mark beside bright prose has to hold its own */
+.step-glyph svg.i { margin-top: calc((var(--row-lh) - 16px) / 2); stroke-width: 1.75; }
+/* the rail: a hairline from this glyph down to the next row */
+.step-glyph::after { content: ""; position: absolute; left: 50%; top: calc(var(--row-lh) / 2 + 14px);
+  bottom: calc(-1 * var(--step-gap) + 2px); width: 1px; margin-left: -.5px; background: var(--s-border-strong); }
+.step-end .step-glyph::after { display: none; }
+/* the closing row is about the answer, not part of it: it sits further
+   down, and speaks in a smaller, quieter voice */
+.step-end { margin-top: 10px; }
+/* opening with the chips or the verbs (28px rows), it centres on them */
+.step-end:has(> .step-body > :first-child:is([data-part="citations"], [data-part="turn-actions"])) { --row-lh: 28px; }
+.step:has(+ .step-end) .step-glyph::after { bottom: calc(-1 * var(--step-gap) - 8px); }
+.step-body { min-width: 0; }
+.step[data-kind="thought"] { --step-c: var(--c-step-thought); }
+.step[data-kind="tool"] { --step-c: var(--c-step-tool); }
+.step[data-kind="confirm"] { --step-c: var(--c-step-confirm); }
+.step[data-kind="answer"] { --step-c: var(--c-step-answer); --row-lh: 27.72px; }   /* the prose line: 16.5px x 1.68 */
+.step[data-kind="error"] { --step-c: var(--c-step-error); }
+.step[data-kind="end"] { --step-c: var(--s-ok); }
+
+.turn { display: flex; flex-direction: column; gap: var(--step-gap); }
+/* the user's side: right-aligned, clock time beside the bubble, no rail */
+.turn-user .step { display: flex; justify-content: flex-end; align-items: flex-start; gap: 0;
+  padding: 0 0 0 var(--gutter); }
+.turn-user .step-glyph { display: none; }
+.turn-user .step-time { order: 2; width: var(--gutter); padding-left: var(--rail-gap); text-align: left;
+  line-height: 44px; flex-shrink: 0; }
+.turn-user .step-body { display: flex; flex-direction: column; align-items: flex-end; max-width: 82%; position: relative; }
+/* what can be done with a message: offered on hover, in the gap below the
+   bubble, so the thread keeps its rhythm when nothing is pointed at */
+.msg-actions { position: absolute; top: 100%; right: 0; display: flex; gap: 2px; margin-top: 2px; white-space: nowrap;
+  opacity: 0; transform: translateY(-3px);
+  transition: opacity var(--dur-base) var(--ease-standard), transform var(--dur-base) var(--ease-entrance); }
+.msg-actions .act-btn, .msg-actions .copy-btn { height: 26px; margin: 0; }
+.turn-user:hover .msg-actions, .turn-user:has(:focus-visible) .msg-actions, .turn[data-hold] .msg-actions { opacity: 1; transform: none; }
+@media (hover: none) { .msg-actions { opacity: .8; transform: none; } }
+
+[data-part="bubble-user"] {
+  display: inline-block; max-width: min(100%, 40rem);
+  background: var(--c-bubble-user-bg); color: var(--c-bubble-user-fg);
+  padding: 11px 16px; border-radius: var(--radius-bubble); border-top-right-radius: 4px;
+  font-size: 15px; line-height: 1.55;
+}
+.attach-chip { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px;
+  font-family: var(--font-mono); font-size: 12px; color: var(--s-text-2);
+  border: 1px solid var(--s-border-strong); border-radius: var(--radius-s); padding: 3px 8px; }
+.attach-chip svg { width: 13px; height: 13px; }
+
+/* disclosure rows (thought, tool): a quiet line that opens in place */
+/* block-level and content-wide on the rail's 20px line: an inline box would sit on
+   the body's taller baseline and drop below the glyph beside it */
+.disc-btn { display: flex; width: fit-content; align-items: center; gap: 8px; min-height: 20px; max-width: 100%;
+  font-size: 13px; line-height: 20px; color: var(--s-text-2); text-align: left; border-radius: 4px; position: relative; }
+.disc-btn::after { content: ""; position: absolute; inset: -10px -8px; }
+.disc-btn:hover { color: var(--s-text); }
+.disc-btn .chev { width: 14px; height: 14px; color: var(--s-text-3);
+  transition: transform var(--dur-base) var(--ease-entrance); }
+.disc-btn[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.disc-panel { display: grid; grid-template-rows: 0fr; opacity: 0;
+  transition: grid-template-rows var(--dur-slow) var(--ease-entrance), opacity var(--dur-base) var(--ease-standard); }
+.disc-panel > div { overflow: hidden; min-height: 0; }
+.disc-btn[aria-expanded="true"] + .disc-panel { grid-template-rows: 1fr; opacity: 1; }
+
+[data-part="thinking"] .think-body { padding-top: 8px; font-size: 13.5px; line-height: 1.6;
+  color: var(--s-text-2); max-width: 68ch; }
+.tag-live { display: none; font-size: 11px; font-weight: 500; color: var(--step-c);
+  border: 1px solid currentColor; border-radius: 99px; padding: 0 7px; line-height: 16px; }
+
+[data-part="tool-trace"] .tool-label { color: var(--s-text); font-weight: 500; }
+.tool-query { font-family: var(--font-mono); font-size: 12px; color: var(--s-text-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tool-meta { font-size: 12px; color: var(--s-text-3); white-space: nowrap; }
+.sources { list-style: none; margin-top: 10px; border: 1px solid var(--s-border);
+  border-radius: var(--radius-m); background: var(--c-card-bg, color-mix(in srgb, var(--s-bg-panel) 70%, transparent)); }
+.sources li { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 2px 8px; padding: 10px 14px; font-size: 13px; }
+.sources li + li { border-top: 1px solid var(--s-border); }
+.sources .n { font-family: var(--font-mono); font-size: 12px; color: var(--step-c); line-height: 20px; }
+.sources .src-title { color: var(--s-text); font-weight: 500; }
+.sources .src-title small { font-family: var(--font-mono); font-size: 12px; font-weight: 400; color: var(--s-text-3); margin-left: 6px; }
+.sources .src-snip { grid-column: 2; color: var(--s-text-2); }
+
+/* the answer: no card, one reading column */
+[data-part="content"] { font-family: var(--font-prose); font-size: var(--text-body); line-height: var(--lh-body);
+  color: var(--s-text); }
+[data-part="content"] > p, [data-part="content"] > ul { max-width: 68ch; }
+[data-part="content"] p + p, [data-part="content"] ul + p, [data-part="content"] [data-part="code-block"] + p { margin-top: 12px; }
+[data-part="content"] ul { list-style: none; margin: 10px 0 0; }
+[data-part="content"] li { position: relative; padding-left: 22px; }
+/* the marker is a star: a lit point in the sky's colour, with its glow */
+[data-part="content"] li::before { content: ""; position: absolute; left: 4px; top: calc(.82em - 2px); width: 5px; height: 5px;
+  border-radius: 50%; background: var(--s-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--s-accent) 35%, transparent), 0 0 7px color-mix(in srgb, var(--s-accent) 75%, transparent); }
+[data-part="content"] li + li { margin-top: 8px; }
+[data-part="content"] b { font-weight: 600; }
+code:not(pre code) { font-family: var(--font-mono); font-size: .82em; background: var(--s-bg-panel);
+  border: 1px solid var(--s-border); border-radius: 5px; padding: 1px 5px; }
+.cite-mark { display: inline-block; font-family: var(--font-ui); font-size: 11px; font-weight: 600; line-height: 16px;
+  min-width: 16px; text-align: center; margin-left: 4px; padding: 0 4px; vertical-align: 2px; cursor: pointer;
+  color: var(--s-accent); background: color-mix(in srgb, var(--s-accent) 14%, transparent); border-radius: 5px;
+  transition: opacity var(--dur-base) var(--ease-standard), background var(--dur-fast); }
+.cite-mark:hover { background: color-mix(in srgb, var(--s-accent) 26%, transparent); }
+
+/* code block: a component, not a bare pre */
+[data-part="code-block"] { margin-top: 14px; font-family: var(--font-ui); max-width: 100%;
+  background: var(--c-code-bg); border: 1px solid var(--s-border); border-radius: var(--radius-m); overflow: hidden; }
+.code-head { display: flex; align-items: center; justify-content: space-between; height: 36px; padding: 0 6px 0 14px;
+  border-bottom: 1px solid var(--s-border); font-size: 12px; color: var(--s-text-3); font-family: var(--font-mono); }
+.copy-btn, .act-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: 6px;
+  font-family: var(--font-ui); font-size: 12px; color: var(--s-text-2); position: relative;
+  transition: background var(--dur-fast), color var(--dur-fast); }
+.copy-btn::after { content: ""; position: absolute; inset: -6px -2px; }
+.copy-btn:hover, .act-btn:hover { background: var(--s-bg-raised); color: var(--s-text); }
+.copy-btn svg, .act-btn svg { width: 14px; height: 14px; }
+.copy-btn .ic { position: relative; width: 14px; height: 14px; }
+.copy-btn .ic svg { position: absolute; inset: 0; transition: opacity var(--dur-base) ease-in-out,
+  transform var(--dur-base) ease-in-out, filter var(--dur-base) ease-in-out; }
+.copy-btn .ic .ok { opacity: 0; transform: scale(.6); filter: blur(2px); color: var(--s-ok); }
+.copy-btn[data-copied] .ic .ok { opacity: 1; transform: none; filter: none; }
+.copy-btn[data-copied] .ic .cp { opacity: 0; transform: scale(.6); filter: blur(2px); }
+pre { font-family: var(--font-mono); font-size: 13px; line-height: 1.65; color: var(--c-code-fg);
+  padding: 12px 14px; overflow-x: auto; tab-size: 2; scrollbar-width: thin; scrollbar-color: var(--s-border-strong) transparent; }
+.tk-c { color: var(--c-code-com); font-style: italic; }
+.tk-k { color: var(--c-code-key); }
+.tk-s { color: var(--c-code-str); }
+.tk-n { color: var(--c-code-num); }
+.tk-f { color: var(--c-code-fn); }
+
+/* reply footer: sources, then what produced the reply */
+[data-part="citations"] { display: flex; flex-wrap: wrap; gap: 6px; }
+.cite-chip { display: inline-flex; align-items: center; gap: 7px; min-height: 28px; padding: 0 10px 0 5px;
+  font-size: 12px; color: var(--s-text-2); background: var(--c-citation-bg);
+  border: 1px solid var(--s-border); border-radius: var(--radius-s); position: relative;
+  transition: border-color var(--dur-fast), color var(--dur-fast); }
+.cite-chip::after { content: ""; position: absolute; inset: -6px 0; }
+.cite-chip:hover { border-color: var(--s-border-strong); color: var(--s-text); }
+.cite-chip b { font-size: 11px; font-weight: 600; min-width: 18px; line-height: 18px; text-align: center;
+  color: var(--s-accent); background: color-mix(in srgb, var(--s-accent) 14%, transparent); border-radius: 4px; }
+/* the row under an answer: three icon verbs, then the figures in small
+   mono. It is a quiet footer, not a toolbar: only the latest answer shows
+   it at rest; older ones show it when pointed at or focused. */
+[data-part="turn-actions"] { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-top: 10px; margin-left: -6px;
+  font-size: 12px; color: var(--s-text-3); opacity: 0; transition: opacity var(--dur-base) var(--ease-standard); }
+.turn:hover [data-part="turn-actions"], .turn:has(:focus-visible) [data-part="turn-actions"], .turn[data-hold] [data-part="turn-actions"],
+.thread-inner > .turn:last-child [data-part="turn-actions"] { opacity: 1; }
+@media (hover: none) { [data-part="turn-actions"], .msg-actions { opacity: .8; } }
+/* icon-only verbs: the label lives in the tooltip and the accessible name */
+.act-btn > span, .copy-btn > .copy-lbl { display: none; }
+.act-btn, .copy-btn:has(.copy-lbl) { width: 28px; padding: 0; justify-content: center; }
+.turn-meta { display: inline-flex; gap: 12px; margin-left: 10px; font-family: var(--font-mono); font-size: 11px; color: var(--s-text-3); }
+.meta-model { color: var(--s-text-2); }
+.meta-num { font-variant-numeric: tabular-nums; }
+
+.cite-mark.is-active, .cite-chip.is-active { border-color: var(--s-accent); color: var(--s-text); }
+.cite-mark.is-active { background: color-mix(in srgb, var(--s-accent) 30%, transparent); }
+/* citation popover: what a marker or chip points at, without leaving the answer */
+[data-part="citation-popover"] { position: fixed; z-index: 40; width: min(340px, calc(100vw - 24px)); padding: 12px 14px 8px;
+  background: var(--c-float-bg, var(--s-bg-raised)); border: 1px solid var(--s-border-strong); border-radius: var(--radius-m);
+  box-shadow: 0 16px 40px var(--s-shadow); font-size: 13px;
+  opacity: 0; transform: translateY(4px) scale(.98); visibility: hidden; transform-origin: 20% 100%;
+  transition: opacity 150ms var(--ease-entrance), transform 150ms var(--ease-entrance), visibility 0s 150ms; }
+[data-part="citation-popover"][data-open] { opacity: 1; transform: none; visibility: visible;
+  transition: opacity var(--dur-base) var(--ease-entrance), transform var(--dur-base) var(--ease-entrance); }
+.cp-head { display: flex; align-items: baseline; gap: 8px; }
+.cp-head b { font-size: 11px; font-weight: 600; min-width: 18px; line-height: 18px; text-align: center; flex-shrink: 0;
+  color: var(--s-accent); background: color-mix(in srgb, var(--s-accent) 14%, transparent); border-radius: 4px; }
+.cp-title { font-weight: 600; color: var(--s-text); }
+.cp-file { font-family: var(--font-mono); font-size: 12px; color: var(--s-text-3); margin: 2px 0 8px 26px; }
+.cp-snip { color: var(--s-text-2); line-height: 1.55; padding: 2px 0 2px 12px; margin: 0 0 8px 8px;
+  border-left: 1px solid var(--s-border-strong); }
+.cp-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 6px;
+  font-size: 12px; color: var(--s-text-3); }
+
+/* honesty notice: a standing line in the turn, not a toast */
+[data-part="notice"] { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; line-height: 1.55;
+  color: var(--s-text-3); max-width: 62ch; }
+[data-part="notice"] b { font-weight: 500; color: var(--s-text); }
+[data-part="notice"] svg { width: 15px; height: 15px; margin-top: 2px; color: var(--s-info); }
+
+/* confirm: a pending action that needs a yes */
+[data-part="confirm"] { border: 1px solid color-mix(in srgb, var(--c-step-confirm) 40%, var(--s-border));
+  background: var(--c-confirm-bg, color-mix(in srgb, var(--c-step-confirm) 5%, var(--s-bg-panel)));
+  border-radius: var(--radius-m); padding: 14px 16px; max-width: 34rem; font-size: 13px; }
+.confirm-head { font-size: 14px; font-weight: 600; }
+.confirm-sub { color: var(--s-text-2); margin-top: 2px; }
+.confirm-sub code { font-size: 12px; }
+.confirm-detail { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; margin: 12px 0 14px;
+  padding: 10px 12px; background: var(--s-bg-inset); border-radius: var(--radius-s); }
+.confirm-detail dt { color: var(--s-text-3); }
+.confirm-actions { display: flex; gap: 8px; }
+.btn { min-height: 36px; padding: 0 14px; border-radius: var(--radius-s); font-size: 13px; font-weight: 600; position: relative;
+  transition: background var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard); }
+.btn::after { content: ""; position: absolute; inset: -2px 0; }
+.btn:active { transform: scale(.98); }
+.btn-primary { background: var(--s-accent); color: var(--s-on-accent); }
+.btn-primary:hover { background: var(--s-accent-hover); }
+.btn-ghost { border: 1px solid var(--s-border-strong); color: var(--s-text-2); }
+.btn-ghost:hover { background: var(--s-bg-raised); color: var(--s-text); }
+
+[data-part="error"] { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 13.5px; color: var(--s-text); }
+[data-part="error"] small { flex-basis: 100%; font-size: 13px; color: var(--s-text-2); }
+
+/* waiting rows: "reaching the model" and "the model is loading" */
+.wait-row { display: flex; align-items: center; min-height: 20px; font-size: 13px; color: var(--s-text-2); }
+.swap { display: inline-grid; }
+.swap > span { grid-area: 1 / 1; transition: opacity 150ms ease-in-out, transform 150ms ease-in-out, filter 150ms ease-in-out; }
+.swap > span[hidden] { display: block; opacity: 0; transform: translateY(4px); filter: blur(2px); pointer-events: none; }
+
+/* matrix loader: sixteen 2px dots, one shared pulse, a per-dot delay */
+.t-matrix { display: grid; grid-template-columns: repeat(4, 2px); grid-auto-rows: 2px; gap: 2px; flex-shrink: 0; margin-top: 3px; }
+.step-glyph .t-matrix { margin-top: calc((var(--row-lh) - 14px) / 2); align-self: flex-start; }
+.t-matrix i { display: block; background: color-mix(in srgb, var(--mx, var(--s-text-3)) 30%, transparent);
+  animation: t-matrix-pulse 1200ms ease-in-out infinite; animation-delay: calc(var(--d, 0) * 1ms); }
+@keyframes t-matrix-pulse {
+  0%, 45%, 100% { background-color: color-mix(in srgb, var(--mx, var(--s-text-3)) 30%, transparent); }
+  15% { background-color: var(--mx, var(--s-text)); }
+}
+
+/* streaming: each chunk fades in; a caret marks the text edge */
+.tok { animation: tok 160ms var(--ease-standard) both; }
+@keyframes tok { from { opacity: 0; } }
+.caret { display: inline-block; width: 2px; height: 1.05em; margin-left: 3px; vertical-align: -.16em;
+  background: var(--s-accent); border-radius: 1px; animation: caret 1s steps(1) infinite; }
+@keyframes caret { 50% { opacity: 0; } }
+.live .step { animation: enter var(--dur-base) var(--ease-entrance); }
+@keyframes enter { from { opacity: 0; transform: translateY(4px); } }
+
+/* ---------- new chat ---------- */
+/* No thread yet, so there is no reading column to protect: the greeting
+   and the composer sit together a little above centre and the sky has the
+   rest of the pane. The line under the greeting says what this install can
+   reach right now, in the same glyphs the rail will use once a turn runs.
+   Sending docks the composer to the foot of the pane. */
+.welcome { display: none; }
+body[data-view="new"] [data-part="thread"], body[data-view="new"] [data-part="jump-bottom"] { display: none; }
+body[data-view="new"] .welcome { display: block; margin-top: auto; padding: 0 20px 26px; text-align: center;
+  animation: enter var(--dur-slow) var(--ease-entrance); }
+body[data-view="new"] [data-part="composer"] { margin-bottom: auto; padding-bottom: 4vh; }
+body[data-view="new"] .composer-wrap { max-width: 44rem; padding: 0; }
+.welcome-head { width: fit-content; margin-inline: auto; font-family: var(--font-prose); font-size: clamp(27px, 3.3vw, 42px); font-weight: 400;
+  line-height: 1.15; letter-spacing: -.01em; text-wrap: balance; color: var(--s-text); }
+/* the one word the theme owns: set in italic, in the sky's own colour */
+.welcome-head em { font-style: italic; color: var(--s-accent); padding-right: .04em; }
+.reach { list-style: none; width: fit-content; margin-inline: auto; display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 24px; margin-top: 16px;
+  font-size: 13px; color: var(--s-text-2); }
+.reach li { display: inline-flex; align-items: center; gap: 7px; }
+.reach b { font-weight: 500; color: var(--s-text); }
+.reach svg.i { width: 15px; height: 15px; color: var(--c-step-tool); }
+body[data-fresh] .turn-old { display: none; }
+/* the composer keeps its identity across the two views, so it travels.
+   The name is carried only while a transition runs: a named element is a
+   backdrop root, and the model menu inside it would then blur nothing. */
+.composer-box.travels { view-transition-name: composer-box; }
+::view-transition-group(composer-box) { animation-duration: 420ms; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 260ms; }
+
+/* ---------- boot ---------- */
+/* Before the shell can mean anything - the backend not yet answering, or
+   the first signed-in load with nothing known about the person - the sky
+   has the whole window. The mark draws itself in and breathes; the
+   headline names what is being waited on, in the greeting's own voice;
+   a rail of three nodes lights up as each wait ends, and the sky keeps
+   the step's colour the way it does for a turn. A wait that runs long
+   says so, counts, and offers a retry. As the shell resolves, the mark
+   travels into the sidebar. */
+.boot { display: none; }
+body[data-view="boot"] .app { display: none; }
+.boot > * { position: relative; z-index: 1; }
+.boot-chart { position: absolute; inset: 0; z-index: 0; width: 100%; height: 100%; pointer-events: none; }
+body[data-view="boot"] .boot { position: fixed; inset: 0; z-index: 1; isolation: isolate; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; padding: 24px 20px 8vh; text-align: center; }
+/* a pool of shade behind the words, as the new chat view has one, so the
+   sky's brightest band never sits under text */
+.boot::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(ellipse 50% 46% at 50% 48%, rgba(11, 13, 32, .86) 0, rgba(11, 13, 32, .76) 34%,
+    rgba(11, 13, 32, .48) 62%, rgba(11, 13, 32, .14) 84%, rgba(11, 13, 32, 0) 100%) 50% 0 / clamp(46rem, 92%, 80rem) 100% no-repeat; }
+html[data-sky="off"] .boot::before { display: none; }
+.boot-mark { position: relative; width: 62px; height: 62px; color: var(--s-accent); }
+.boot-mark svg { width: 100%; height: 100%; stroke-width: 1.2; overflow: visible; }
+/* the mark draws itself in once, then keeps a slow halo */
+/* the drawn state is the rest state and the start lives in the keyframe, so reduced motion,
+   which strips the animation, shows the mark whole */
+.boot-mark path { stroke-dasharray: 1; animation: boot-draw 1100ms var(--ease-standard) both; }
+.boot-mark path + path { animation-delay: 240ms; }
+.boot-mark::before { content: ""; position: absolute; inset: -40px; z-index: -1; border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--s-accent) 36%, transparent) 0,
+    color-mix(in srgb, var(--s-accent) 10%, transparent) 42%, transparent 70%);
+  animation: boot-halo 3600ms ease-in-out infinite; }
+@keyframes boot-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes boot-halo { 0%, 100% { opacity: .5; transform: scale(.88); } 50% { opacity: 1; transform: scale(1.1); } }
+.boot-name { margin-top: 24px; font-size: 12px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: var(--s-text-2);
+  animation: enter 600ms var(--ease-entrance) 300ms both; }
+/* the headline swaps with each wait; the thing waited on is the lit word */
+.boot-head { width: fit-content; margin-inline: auto; margin-top: 12px; font-family: var(--font-prose); font-size: clamp(27px, 3.3vw, 42px); font-weight: 400; line-height: 1.15;
+  letter-spacing: -.01em; text-wrap: balance; color: var(--s-text); min-height: 1.12em; }
+.boot-head em { font-style: italic; color: var(--s-accent); padding-right: .04em; }
+.boot-head.swap-in { animation: boot-head-in 560ms var(--ease-entrance) both; }
+@keyframes boot-head-in { from { opacity: 0; transform: translateY(10px); filter: blur(5px); } }
+.boot-sub { margin-top: 12px; min-height: 18px; font-family: var(--font-mono); font-size: 12.5px; color: var(--s-text-2); }
+/* the rail: three nodes on a line; the lit length grows as waits end */
+.boot-rail { list-style: none; position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: min(100%, 40rem);
+  margin-top: 46px; animation: enter 700ms var(--ease-entrance) 700ms both; }
+.boot-rail::before, .boot-rail::after { content: ""; position: absolute; top: 12px; left: calc(100% / 6); right: calc(100% / 6); height: 1px;
+  background: var(--s-border-strong); }
+.boot-rail::after { right: auto; width: calc((100% - 100% / 3) * var(--lit, 0)); background: var(--s-accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--s-accent) 70%, transparent); transition: width 700ms var(--ease-standard); }
+.boot-node { display: flex; flex-direction: column; align-items: center; gap: 12px; font-size: 14px; font-weight: 500; color: var(--s-text-3);
+  transition: color var(--dur-base) var(--ease-standard); }
+.boot-node[data-step="live"] { color: var(--s-text); }
+.boot-node[data-step="done"] { color: var(--s-text-2); }
+.boot-node small { display: block; margin-top: 3px; min-height: 16px; font-size: 12px; font-weight: 400; color: var(--s-text-3); }
+.boot-dot { position: relative; z-index: 1; width: 25px; height: 25px; border-radius: 50%; display: grid; place-items: center;
+  border: 1px solid var(--s-border-strong); background: var(--s-bg-app);
+  transition: border-color var(--dur-base) var(--ease-standard), background var(--dur-base) var(--ease-standard); }
+/* the check and the live pulse share one cell, so each sits dead centre */
+.boot-dot > svg, .boot-dot::after { grid-area: 1 / 1; }
+.boot-dot svg { width: 13px; height: 13px; opacity: 0; transform: scale(.5);
+  transition: opacity var(--dur-base) var(--ease-standard), transform var(--dur-slow) var(--ease-entrance); }
+.boot-node[data-step="live"] .boot-dot { border-color: color-mix(in srgb, var(--s-accent) 45%, transparent); }
+.boot-node[data-step="live"] .boot-dot::before { content: ""; position: absolute; inset: -1px; border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 68%, var(--s-accent) 100%);
+  -webkit-mask: radial-gradient(circle, transparent 10.5px, #000 11.5px); mask: radial-gradient(circle, transparent 10.5px, #000 11.5px);
+  animation: boot-spin 1100ms linear infinite; }
+.boot-node[data-step="live"] .boot-dot::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--s-accent);
+  animation: boot-pulse 1100ms ease-in-out infinite; }
+.boot-node[data-step="done"] .boot-dot { background: var(--s-accent); border-color: var(--s-accent); color: var(--s-on-accent); }
+.boot-node[data-step="done"] .boot-dot svg { opacity: 1; transform: none; }
+@keyframes boot-spin { to { transform: rotate(360deg); } }
+@keyframes boot-pulse { 50% { transform: scale(.55); opacity: .5; } }
+.boot-slow { max-width: 32rem; margin-top: 32px; font-size: 14px; line-height: 1.55; color: var(--s-text-2);
+  animation: enter var(--dur-slow) var(--ease-entrance); }
+.boot-slow .btn { margin-top: 14px; }
+@media (max-width: 560px) {
+  .boot-chart { display: none; }   /* a tall narrow screen has no room around the words for rings */
+  .boot-rail { grid-template-columns: 1fr; gap: 16px; justify-items: start; width: auto; margin-top: 36px; }
+  .boot-rail::before, .boot-rail::after { display: none; }
+  .boot-node { flex-direction: row; text-align: left; }
+}
+/* the mark is the one thing both screens share, so it is what travels */
+.boot-mark.travels, #brand-mark.travels { view-transition-name: brand-mark; }
+/* the headline becomes the greeting; each rail node becomes its reach item
+   (names set inline while the transition runs). The greeting's own entrance
+   waits, or the morph would land on a fading target. */
+.boot-head.travels, .welcome-head.travels { view-transition-name: headline; }
+::view-transition-group(brand-mark), ::view-transition-group(headline), ::view-transition-group(node-1), ::view-transition-group(node-2), ::view-transition-group(node-3) {
+  animation-duration: 560ms; animation-timing-function: cubic-bezier(.4, 0, .2, 1); }
+::view-transition-old(headline), ::view-transition-old(node-1), ::view-transition-old(node-2), ::view-transition-old(node-3) { animation-duration: 320ms; }
+/* text is never stretched to the moving box: each image keeps its size and
+   the two cross-fade in place as the box travels; a node shrinks into its item */
+::view-transition-old(headline), ::view-transition-new(headline) { height: 100%; object-fit: none; }
+::view-transition-old(node-1), ::view-transition-new(node-1), ::view-transition-old(node-2), ::view-transition-new(node-2),
+::view-transition-old(node-3), ::view-transition-new(node-3) { height: 100%; object-fit: contain; }
+/* when a view transition carries the greeting in, its own entrance stays off
+   (it would replay the moment the transition ended, as a flicker) */
+html[data-vt] body[data-view="new"] .welcome { animation: none; }
+
+/* ---------- console ---------- */
+/* Management lives at /console: the same topbar, a rail where the sidebar
+   was, and one work column (52rem) under a veil like the thread's, so the
+   sky keeps the margins. The page answers the way a turn does: a download
+   is the runtime busy (the amber of a model loading), a check is the model
+   at work (teal), rest is rest. Rows are lit panes; the activity panel is a
+   touch heavier and carries the running colour along its top edge, since
+   it is the one thing on the page that changes while it is watched. */
+.console { display: none; }
+body[data-view="console"] .console { display: flex; flex-direction: column; flex: 1; min-width: 0; position: relative; }
+body[data-view="console"] [data-part="sidebar"], body[data-view="console"] .main, body[data-view="console"] .scrim { display: none; }
+.console-back { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px 0 6px; border-radius: var(--radius-s);
+  font-size: 13px; color: var(--s-text-2); transition: background var(--dur-fast), color var(--dur-fast); }
+.console-back:hover { background: var(--s-bg-raised); color: var(--s-text); }
+.console-back svg { width: 14px; height: 14px; }
+.console-body { display: flex; flex: 1; min-height: 0; }
+[data-part="console-rail"] { width: 272px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; padding: 14px 10px;
+  background: var(--c-sidebar-bg, var(--s-bg-panel)); border-right: 1px solid var(--s-border); }
+.console-rail-item { display: flex; align-items: center; min-height: var(--hit); padding: 0 12px; border-radius: var(--radius-s);
+  font-size: 13px; color: var(--s-text-2); text-decoration: none; transition: background var(--dur-fast), color var(--dur-fast); }
+.console-rail-item:hover { background: var(--s-bg-raised); color: var(--s-text); }
+.console-rail-item[aria-current="page"] { background: var(--s-bg-raised); color: var(--s-text); font-weight: 500; }
+.console-main { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; }
+.console-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 32px 28px 72px; scrollbar-width: thin; scrollbar-color: var(--s-border-strong) transparent; }
+[data-part="model-manager"] { width: 100%; max-width: 52rem; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+.mm-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.mm-title { font-family: var(--font-prose); font-size: 30px; font-weight: 400; line-height: 1.15; letter-spacing: -.01em; }
+.mm-meta { font-family: var(--font-mono); font-size: 12px; color: var(--s-text-3); font-variant-numeric: tabular-nums; }
+.mm-headline .mm-meta { margin-top: 6px; }
+/* what is in memory right now: the topbar's status, as a list */
+.mm-loaded { min-width: 16rem; padding: 10px 14px 12px; border: 1px solid var(--s-border); border-radius: var(--radius-m);
+  background: var(--c-card-bg, color-mix(in srgb, var(--s-bg-panel) 70%, transparent)); font-size: 12.5px; }
+.mm-loaded-title { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--s-text-3); }
+.mm-loaded-row { display: flex; align-items: center; gap: 9px; margin-top: 7px; color: var(--s-text-2); }
+.mm-loaded-row code { font-family: var(--font-mono); font-size: 12px; color: var(--s-text); }
+.mm-loaded-row small { margin-left: auto; padding-left: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--s-text-3); }
+/* a banner is a standing notice; a gap card is the banner wearing a severity, on its title line only */
+.mm-banner { padding: 12px 16px 13px; border: 1px solid var(--s-border-strong); border-radius: var(--radius-m);
+  background: var(--c-card-bg, var(--s-bg-panel)); font-size: 13px; line-height: 1.55; color: var(--s-text); }
+.mm-banner.warn { border-color: color-mix(in srgb, var(--s-warn) 40%, var(--s-border)); }
+.mm-banner.error { border-color: color-mix(in srgb, var(--s-danger) 40%, var(--s-border)); }
+.mm-gap-title { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.mm-gap-title svg { width: 15px; height: 15px; }
+.mm-banner.warn .mm-gap-title { color: var(--s-warn); }
+.mm-banner.error .mm-gap-title { color: var(--s-danger); }
+.mm-gap-body { color: var(--s-text-2); margin-top: 3px; max-width: 70ch; }
+.mm-gap-fix { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; font-weight: 500; color: var(--s-accent); text-decoration: none; }
+.mm-gap-fix:hover { text-decoration: underline; }
+/* the one long operation, above the grid */
+[data-part="mm-activity"] { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 15px;
+  border: 1px solid var(--s-border-strong); border-radius: var(--radius-m); isolation: isolate;
+  background: var(--c-activity-bg, var(--s-bg-raised)); animation: enter var(--dur-slow) var(--ease-entrance); }
+[data-part="mm-activity"][hidden], .mm-body[hidden] { display: none; }
+.mm-activity-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.mm-activity-title { font-size: 14px; font-weight: 600; }
+.mm-activity-verbs { display: flex; gap: 8px; }
+.mm-tag { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--s-text); }
+.mm-note { font-size: 13px; color: var(--s-text-2); }
+.mm-note.ok { color: var(--s-ok); } .mm-note.warn { color: var(--s-warn); } .mm-note.error { color: var(--s-danger); }
+.mm-hint { font-size: 12.5px; color: var(--s-text-3); }
+.mm-bar { position: relative; height: 6px; border-radius: 3px; background: var(--s-bg-inset); overflow: hidden; }
+.mm-bar i { display: block; height: 100%; width: 0; border-radius: 3px; background: var(--s-accent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--s-accent) 70%, transparent); transition: width 900ms var(--ease-standard); }
+.mm-bar.indeterminate i { display: none; }
+.mm-bar.indeterminate::after { content: ""; position: absolute; top: 0; bottom: 0; width: 30%; border-radius: 3px;
+  background: linear-gradient(90deg, transparent, var(--s-accent), transparent); animation: mm-indeterminate 1400ms ease-in-out infinite; }
+@keyframes mm-indeterminate { from { left: -30%; } to { left: 100%; } }
+/* a check: each finished sample as a line, as it lands */
+.mm-cases { list-style: none; display: flex; flex-direction: column; gap: 5px; margin-top: 2px; font-size: 13px; }
+.mm-case { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 10px; align-items: center; animation: enter var(--dur-base) var(--ease-entrance); }
+.mm-case-glyph { width: 14px; height: 14px; }
+.mm-case.pass .mm-case-glyph, .mm-case.pass .mm-case-word { color: var(--s-ok); }
+.mm-case.fail .mm-case-glyph, .mm-case.fail .mm-case-word { color: var(--s-danger); }
+.mm-case-name { color: var(--s-text); }
+.mm-case-word { font-size: 12px; font-weight: 500; margin-left: 8px; }
+.mm-case-detail { font-family: var(--font-mono); font-size: 12px; color: var(--s-text-3); font-variant-numeric: tabular-nums; }
+.mm-case-gloss { color: var(--s-text-3); font-size: 12.5px; margin: 4px 0 1px; }
+.mm-section { display: flex; flex-direction: column; gap: 10px; }
+.mm-section-title { font-size: 15px; font-weight: 600; }
+.mm-section-note { font-size: 13px; color: var(--s-text-2); max-width: 66ch; margin-top: -4px; }
+.mm-addbox { display: flex; gap: 8px; flex-wrap: wrap; }
+.mm-input { flex: 1; min-width: 14rem; min-height: 40px; padding: 0 12px; border-radius: var(--radius-s);
+  border: 1px solid var(--s-border-strong); background: var(--c-input-bg, var(--s-bg-inset)); color: var(--s-text);
+  font-family: var(--font-mono); font-size: 13px; outline: none; transition: border-color var(--dur-fast), box-shadow var(--dur-fast); }
+.mm-input::placeholder { color: var(--s-text-3); }
+.mm-input:focus { border-color: color-mix(in srgb, var(--s-accent) 70%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--s-accent) 14%, transparent); }
+/* a row: summary line over a body of detail. The pills keep one width so
+   their dots make a column down the page; the action sits outside the
+   expand trigger. */
+.mm-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.mm-row { position: relative; border: 1px solid var(--s-border); border-radius: var(--radius-m); overflow: hidden;   /* positioned: the pills' hidden labels are absolute, and must not reach past the row */
+  background: var(--c-card-bg, color-mix(in srgb, var(--s-bg-panel) 70%, transparent)); }
+.mm-head { position: relative; display: flex; align-items: center; transition: background var(--dur-fast); }
+.mm-head:hover { background: color-mix(in srgb, var(--s-text) 4%, transparent); }
+.mm-summary { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto auto var(--slot, 6.5rem) 16px; align-items: center; gap: 12px;
+  min-height: 52px; padding: 8px 14px 8px 16px; text-align: left; }
+.mm-summary:focus-visible, .mm-action .btn:focus-visible, .mm-pullmini:focus-visible { outline-offset: -2px; border-radius: 0; }
+.mm-name { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.badge { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 99px; font-size: 11px; font-weight: 500;
+  color: var(--s-text-2); border: 1px solid var(--s-border-strong); }
+.badge.cap { color: color-mix(in srgb, var(--s-accent) 80%, var(--s-text)); border-color: color-mix(in srgb, var(--s-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--s-accent) 10%, transparent); }
+.mm-state { display: inline-flex; align-items: center; gap: 7px; width: 8.5rem; font-size: 12px; color: var(--s-text-2); white-space: nowrap; }
+.mm-state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; box-shadow: inset 0 0 0 1.5px var(--s-text-3); }
+.mm-state.ok::before { background: var(--s-ok); box-shadow: none; }
+.mm-state.warn::before { background: var(--s-warn); box-shadow: none; }
+.mm-state.warn { color: color-mix(in srgb, var(--s-warn) 70%, var(--s-text)); }
+.mm-state-space { width: 8.5rem; }
+.mm-chevron { grid-column: 5; color: var(--s-text-3); display: flex; transition: transform var(--dur-base) var(--ease-entrance), color var(--dur-fast); }
+.mm-summary:hover .mm-chevron { color: var(--s-text); }
+.mm-summary[aria-expanded="true"] .mm-chevron { transform: rotate(180deg); }
+/* the slot lies over the reserved column, outside the trigger in the tree;
+   an empty slot lets clicks fall through to the summary beneath it */
+.mm-action { position: absolute; top: 0; bottom: 0; right: calc(14px + 16px + 12px); width: 6.5rem; display: flex; align-items: center;
+  justify-content: flex-end; pointer-events: none; }
+.mm-action > * { pointer-events: auto; }
+.mm-action > [hidden] { display: none; }
+/* while this row's own download runs, the slot is the readout: tabular
+   percent over a 3px hairline */
+.mm-pullmini { display: flex; flex-direction: column; align-items: stretch; gap: 5px; width: 6rem; padding: 6px 8px; border-radius: var(--radius-s);
+  font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; color: var(--s-text); text-align: right; }
+.mm-pullmini:hover { background: color-mix(in srgb, var(--s-text) 6%, transparent); }
+.mm-minibar { height: 3px; border-radius: 2px; background: var(--s-bg-inset); overflow: hidden; }
+.mm-minibar i { display: block; height: 100%; width: 0; background: var(--s-accent); box-shadow: 0 0 8px color-mix(in srgb, var(--s-accent) 70%, transparent);
+  transition: width 900ms var(--ease-standard); }
+.mm-body { padding: 2px 16px 16px; border-top: 1px solid var(--s-border); display: flex; flex-direction: column; gap: 14px; }
+.mm-facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: 12px 16px; margin-top: 12px; }
+.mm-fact dt { font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--s-text-3); }
+.mm-fact dd { font-size: 13px; color: var(--s-text); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.mm-fact dd code { font-family: var(--font-mono); font-size: 12px; }
+.mm-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mm-chip { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: var(--radius-s); font-size: 12px;
+  color: var(--s-text-2); border: 1px solid var(--s-border); }
+.mm-chip.cap { color: color-mix(in srgb, var(--s-accent) 80%, var(--s-text)); border-color: color-mix(in srgb, var(--s-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--s-accent) 8%, transparent); }
+/* the check's story: one labelled zone, apart from the declared facts */
+.mm-zone { border-top: 1px solid var(--s-border); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.mm-overline { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--s-text-3); }
+.mm-measured { font-size: 13px; color: var(--s-text-2); }
+.mm-measured b { font-family: var(--font-mono); font-weight: 500; color: var(--s-text); font-variant-numeric: tabular-nums; }
+.mm-verdict { font-size: 14px; font-weight: 600; }
+.mm-verdict-gloss { font-size: 13px; color: var(--s-text-2); max-width: 66ch; }
+.mm-tallies { display: flex; flex-wrap: wrap; gap: 6px; }
+.mm-tally { font-family: var(--font-mono); font-size: 12px; padding: 3px 8px; border-radius: 6px; background: var(--s-bg-inset); color: var(--s-text-2);
+  font-variant-numeric: tabular-nums; }
+.mm-tally b { color: var(--s-text); font-weight: 500; }
+.mm-zone-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+/* housekeeping, last: the benign verb, then the destructive one; a refused
+   verb stays, disabled, with its reason beside it as text */
+.mm-danger { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; border-top: 1px solid var(--s-border); padding-top: 12px; }
+.btn-danger { border: 1px solid color-mix(in srgb, var(--s-danger) 45%, transparent); color: var(--s-danger); }
+.btn-danger:hover { background: color-mix(in srgb, var(--s-danger) 12%, transparent); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn:disabled:hover { background: none; }
+.mm-reason { font-size: 12.5px; color: var(--s-text-2); }
+/* a comet runs round the panel's border while something runs
+   (unlayered: the reset zeroes a pseudo's padding, and the ring is cut
+   from that padding): a ring
+   (the border, masked out of a conic sweep) and the same sweep blurred
+   behind it as a glow. It fades in and out; the lap itself is steady. */
+[data-part="mm-activity"]::before, [data-part="mm-activity"]::after { content: ""; position: absolute; inset: -1px; border-radius: inherit;
+  pointer-events: none; opacity: 0; transition: opacity 900ms var(--ease-standard);
+  background: conic-gradient(from var(--mm-ang), transparent 0 58%, color-mix(in srgb, var(--sky-tint) 30%, transparent) 76%,
+    var(--sky-tint) 93%, color-mix(in srgb, var(--sky-tint) 40%, #fff) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; }
+[data-part="mm-activity"]::before { padding: 1.5px; }
+[data-part="mm-activity"]::after { inset: -7px; padding: 8px; z-index: -1; filter: blur(7px); }
+[data-part="mm-activity"][data-running]::before, [data-part="mm-activity"][data-running]::after { opacity: 1; animation: mm-lap 4.8s linear infinite; }
+@keyframes mm-lap { to { --mm-ang: 360deg; } }
+@media (max-width: 760px) {
+  .console-body { flex-direction: column; }
+  [data-part="console-rail"] { width: auto; flex-direction: row; overflow-x: auto; padding: 8px 10px; border-right: none; border-bottom: 1px solid var(--s-border); }
+  .console-rail-item { white-space: nowrap; }
+  .console-scroll { padding: 20px 14px 60px; }
+  .mm-summary { --slot: 0px; grid-template-columns: minmax(0, 1fr) var(--slot) 16px; row-gap: 4px; padding: 10px 12px 10px 14px; }
+  .mm-head:has(.mm-action > :not([hidden])) .mm-summary { --slot: 6.5rem; }   /* the pills stack under the name here, so only a live slot keeps its column */
+  .mm-name { grid-column: 1; }
+  .mm-chevron { grid-column: 3; grid-row: 1 / span 3; }
+  .mm-state { grid-column: 1; width: auto; }
+  .mm-state-space { display: none; }
+  .mm-action { right: calc(12px + 16px + 12px); }
+  .mm-loaded { min-width: 0; width: 100%; }
+}
+/* the topbar is one bar across chat and console, and the rail stands where
+   the sidebar stood, so both travel between the two */
+[data-part="topbar"].travels { view-transition-name: topbar; }
+[data-part="sidebar"].travels, [data-part="console-rail"].travels { view-transition-name: side-rail; }
+::view-transition-group(topbar), ::view-transition-group(side-rail) { animation-duration: 360ms; animation-timing-function: cubic-bezier(.4, 0, .2, 1); }
+
+/* ---------- sign in ---------- */
+/* The sky has the window, as at boot, with the chart quiet behind one
+   glass card: the mark, the name, one line and one button. A session that
+   lapsed mid-task says what it was doing. Signing in leads into the boot
+   screen, and the mark is what carries across. */
+.login { display: none; }
+body[data-view="login"] .login { position: fixed; inset: 0; z-index: 1; isolation: isolate; display: flex; align-items: center; justify-content: center;
+  padding: 24px 20px; }
+body[data-view="login"] .app { display: none; }
+.login::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(ellipse 50% 44% at 50% 50%, rgba(11, 13, 32, .72) 0, rgba(11, 13, 32, .54) 38%,
+    rgba(11, 13, 32, .16) 74%, rgba(11, 13, 32, 0) 100%) 50% 0 / clamp(40rem, 84%, 68rem) 100% no-repeat; }
+html[data-sky="off"] .login::before { display: none; }
+.login-card { position: relative; width: min(100%, 23.5rem); display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 36px 32px 28px; text-align: center; border-radius: var(--radius-l); border: 1px solid var(--s-border-strong);
+  background: var(--c-composer-bg, var(--s-bg-panel)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10), 0 24px 60px rgba(3, 4, 14, .42);
+  animation: enter 600ms var(--ease-entrance) both; }
+.login-mark { position: relative; width: 52px; height: 52px; margin-bottom: 8px; color: var(--s-accent); }
+.login-mark svg { width: 100%; height: 100%; stroke-width: 1.2; overflow: visible; }
+.login-mark::before { content: ""; position: absolute; inset: -30px; z-index: -1; border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--s-accent) 30%, transparent) 0,
+    color-mix(in srgb, var(--s-accent) 8%, transparent) 42%, transparent 70%);
+  animation: boot-halo 3600ms ease-in-out infinite; }
+.login-mark.travels { view-transition-name: brand-mark; }
+.login-name { font-size: 12px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: var(--s-text-2); }
+.login-head { font-family: var(--font-prose); font-size: 28px; font-weight: 400; line-height: 1.15; letter-spacing: -.01em; color: var(--s-text);
+  text-wrap: balance; }
+.login-head em { font-style: italic; color: var(--s-accent); padding-right: .04em; }
+.login-lede { font-size: 13.5px; line-height: 1.55; color: var(--s-text-2); text-wrap: pretty; }
+.login-lede b { font-weight: 500; color: var(--s-text); }
+.login-btn { width: 100%; min-height: 44px; margin-top: 10px; display: inline-flex; align-items: center; justify-content: center; }
+.login-foot { margin-top: 4px; font-size: 12px; color: var(--s-text-3); }
+html[data-vt] body[data-view="login"] .login-card { animation: none; }
+
+/* ---------- 5. Composer ---------- */
+[data-part="composer"] { position: relative; flex-shrink: 0; padding: 0 20px 14px; }
+.composer-wrap { max-width: calc(var(--col) + 2 * var(--gutter)); margin: 0 auto; padding: 0 var(--gutter); }
+
+/* jump to latest: offered whenever the reader has scrolled away from the
+   end. A dot marks that something arrived while they were away. */
+[data-part="jump-bottom"] { position: absolute; left: 50%; top: -46px; z-index: 5; width: 36px; height: 36px; margin-left: -18px;
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;
+  background: var(--c-float-bg, var(--s-bg-raised)); border: 1px solid var(--s-border-strong); color: var(--s-text-2);
+  box-shadow: 0 8px 20px var(--s-shadow);
+  opacity: 0; transform: translateY(6px) scale(.96); visibility: hidden;
+  transition: opacity 150ms var(--ease-entrance), transform 150ms var(--ease-entrance), visibility 0s 150ms,
+    color var(--dur-fast), background var(--dur-fast); }
+[data-part="jump-bottom"]::after { content: ""; position: absolute; inset: -4px; }
+[data-part="jump-bottom"][data-show] { opacity: 1; transform: none; visibility: visible;
+  transition: opacity var(--dur-base) var(--ease-entrance), transform var(--dur-base) var(--ease-entrance),
+    color var(--dur-fast), background var(--dur-fast); }
+[data-part="jump-bottom"]:hover { color: var(--s-text); background: color-mix(in srgb, var(--s-text) 8%, var(--s-bg-raised)); }
+[data-part="jump-bottom"] svg { transform: rotate(180deg); }
+[data-part="jump-bottom"] i { position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--s-accent); border: 2px solid var(--s-bg-app); transform: scale(0);
+  transition: transform var(--dur-base) var(--ease-entrance); }
+[data-part="jump-bottom"][data-new] i { transform: none; }
+
+/* model notice: docked to the composer, in the layout, never over the thread */
+[data-part="composer-notice"] { display: grid; grid-template-rows: 0fr; opacity: 0;
+  transition: grid-template-rows var(--dur-slow) var(--ease-entrance), opacity var(--dur-base) var(--ease-standard); }
+[data-part="composer-notice"][data-open] { grid-template-rows: 1fr; opacity: 1; }
+[data-part="composer-notice"] > div { overflow: hidden; min-height: 0; }
+.cn-box { display: flex; align-items: flex-start; gap: 12px; margin: 0 12px; padding: 10px 8px 10px 14px;
+  background: var(--c-card-bg, var(--s-bg-panel)); border: 1px solid var(--s-border-strong); border-bottom: none;
+  border-radius: var(--radius-m) var(--radius-m) 0 0; font-size: 13px; }
+.cn-box .t-matrix { margin-top: 5px; --mx: var(--s-warn); }
+.cn-text { flex: 1; min-width: 0; color: var(--s-text-2); }
+.cn-text b { display: block; color: var(--s-text); font-weight: 600; }
+
+.composer-box { background: var(--c-composer-bg, var(--s-bg-raised)); border: 1px solid var(--s-border-strong); border-radius: var(--radius-l);
+  padding: 12px 12px 10px 16px; display: flex; flex-direction: column; gap: 8px;
+  transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard); }
+.composer-box:focus-within { border-color: color-mix(in srgb, var(--s-accent) 70%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--s-accent) 14%, transparent); }
+.composer-input { border: none; background: none; resize: none; font: inherit; font-size: 15px; line-height: 1.5;
+  color: var(--s-text); caret-color: var(--s-accent); outline: none; min-height: 26px; width: 100%; }
+.composer-input::placeholder { color: var(--c-composer-placeholder, var(--s-text-3)); }
+.composer-row { display: flex; align-items: center; gap: 6px; margin-left: -8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border-radius: var(--radius-s);
+  font-size: 13px; color: var(--s-text-2); position: relative; white-space: nowrap;
+  transition: color var(--dur-fast), background var(--dur-fast); }
+.chip::after { content: ""; position: absolute; inset: -4px 0; }
+.chip:hover { background: color-mix(in srgb, var(--s-text) 7%, transparent); color: var(--s-text); }
+.chip[aria-pressed="true"] { color: var(--s-accent); }
+/* a toggle that is on but will not apply this turn: thinking is on, and the
+   chosen model cannot reason and use tools at once, so search stands down */
+.chip[data-held] { color: var(--s-text-3); }
+.chip[data-held] .lbl { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--s-text-3) 60%, transparent); }
+.chip svg.i { width: 15px; height: 15px; }
+
+[data-part="model-select"] { position: relative; margin-left: auto; }
+[data-part="model-select"] .chip { font-family: var(--font-mono); font-size: 12px; }
+.model-menu { position: absolute; bottom: calc(100% + 8px); right: 0; z-index: 30; width: 300px; list-style: none;
+  background: var(--c-float-bg, var(--s-bg-raised)); border: 1px solid var(--s-border-strong); border-radius: var(--radius-m);
+  padding: 6px; box-shadow: 0 16px 40px var(--s-shadow);
+  transform-origin: 100% 100%; opacity: 0; transform: scale(.97); visibility: hidden;
+  transition: opacity 150ms var(--ease-entrance), transform 150ms var(--ease-entrance), visibility 0s 150ms; }
+[data-part="model-select"][data-open] .model-menu { opacity: 1; transform: none; visibility: visible;
+  transition: opacity var(--dur-base) var(--ease-entrance), transform var(--dur-base) var(--ease-entrance); }
+.model-opt { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 10px; width: 100%; text-align: left;
+  padding: 8px 10px; border-radius: var(--radius-s); font-family: var(--font-mono); font-size: 12px; }
+.model-opt span { grid-column: 1; font-family: var(--font-ui); color: var(--s-text-3); }
+.model-opt em { grid-row: 1; grid-column: 2; font-family: var(--font-ui); font-style: normal; font-size: 11px; color: var(--s-text-3);
+  display: inline-flex; align-items: center; gap: 6px; }
+.model-opt em::before { content: ""; width: 6px; height: 6px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--s-text-3); }
+.model-opt[data-loaded] em::before { background: var(--s-ok); box-shadow: none; }
+.model-opt:hover { background: color-mix(in srgb, var(--s-text) 7%, transparent); }
+.model-opt[aria-current="true"] { background: color-mix(in srgb, var(--s-accent) 9%, transparent); }
+
+.send { width: 34px; height: 34px; border-radius: 10px; margin-left: 4px; position: relative;
+  background: var(--s-accent); color: var(--s-on-accent); display: inline-flex; align-items: center; justify-content: center;
+  transition: background var(--dur-fast) var(--ease-standard), transform var(--dur-fast) var(--ease-standard); }
+.send::after { content: ""; position: absolute; inset: -3px; }
+.send:hover { background: var(--s-accent-hover); }
+.send:active { transform: scale(.96); }
+.send .stop { display: none; width: 10px; height: 10px; border-radius: 2px; background: currentColor; }
+.hint { text-align: center; font-size: 12px; color: var(--s-text-3); margin-top: 8px; }
+
+/* ---------- 6. States ---------- */
+/* Which live rows show per state is harness JS; CSS styles the busy looks. */
+body[data-busy] .send { background: var(--s-bg-panel); color: var(--s-danger); box-shadow: inset 0 0 0 1px var(--s-border-strong); }
+body[data-busy] .send svg { display: none; }
+body[data-busy] .send .stop { display: block; }
+body[data-state="confirm"] .composer-box { opacity: .55; pointer-events: none; }
+
+/* ---------- 7. Reduced motion / reduced transparency (base-sheet law) ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition-duration: 1ms !important; }
+  body[data-state="thinking"] .live .tag-live { display: inline-block; }
+  .t-matrix i:nth-child(odd) { background: var(--mx, var(--s-text-2)); }
+}
+
+/* ---------- 8. THEME FLOURISH LAYER (aurora) ---------- */
+/* The sky lives behind the app, vivid in the margins and held back from
+   the reading column by a veil. It answers the turn: it takes the colour
+   of the step that is running (violet for reasoning, teal for tools,
+   magenta for an action waiting on a yes), rises with activity, and rests
+   at idle. Two renderers are offered for comparison, plus none:
+     data-sky="shader" - one WebGL plane at half resolution
+     data-sky="css"    - three pre-blurred curtain layers, transform-only
+     data-sky="off"    - the flat night: the low-power and
+                         reduced-transparency fallback
+   The only glass is the sidebar, which is where a blur still earns its cost. */
+@property --sky-tint { syntax: "<color>"; inherits: true; initial-value: #45e0c8; }
+@property --mm-ang { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+
+html { transition: --sky-tint 1200ms cubic-bezier(.4, 0, .2, 1); }
+.sky { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: var(--s-bg-app);
+  --sky-e: .36; --sky-tint: #45e0c8; transition: --sky-tint 1200ms var(--ease-standard); }
+.sky canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: none; }
+html[data-sky="shader"] .sky canvas { display: block; }
+/* constellations: the one sharp layer over the soft sky. Stars, and now
+   and then a few neighbours joined by a thin line that traces itself in,
+   holds, and fades - some faint, some lit. Shown where the harness says. */
+#sky-stars { display: none; }
+html[data-stars="all"] #sky-stars, html[data-stars="boot"] body[data-view="boot"] #sky-stars { display: block; }
+html[data-sky="off"] .sky > * { display: none; }
+
+.sky-css { position: absolute; inset: 0; display: none;
+  opacity: calc(.45 + .55 * var(--sky-e)); transform-origin: 50% 0; transform: scaleY(calc(.9 + .3 * var(--sky-e)));
+  transition: opacity 1200ms var(--ease-standard), transform 1600ms var(--ease-entrance); }
+html[data-sky="css"] .sky-css { display: block; }
+.sky-css i { position: absolute; top: -12%; left: -60%; width: 220%; height: 125%; filter: blur(34px);
+  mix-blend-mode: screen; will-change: transform;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0, rgba(0,0,0,.8) 30%, rgba(0,0,0,.35) 65%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 0, rgba(0,0,0,.8) 30%, rgba(0,0,0,.35) 65%, transparent 100%); }
+.sky-css i:nth-child(1) { animation: sky-a 58s linear infinite alternate;
+  background: linear-gradient(97deg, transparent 0, rgba(69,224,200,.55) 5%, transparent 11%, transparent 19%,
+    rgba(154,138,251,.5) 27%, transparent 36%, rgba(69,224,200,.45) 47%, transparent 53%, transparent 63%,
+    rgba(234,127,220,.4) 71%, transparent 80%, rgba(69,224,200,.5) 90%, transparent 97%); }
+.sky-css i:nth-child(2) { animation: sky-b 74s linear infinite alternate; height: 100%;
+  background: linear-gradient(84deg, transparent 0, rgba(154,138,251,.45) 9%, transparent 17%, rgba(69,224,200,.4) 31%,
+    transparent 39%, transparent 52%, rgba(154,138,251,.5) 60%, transparent 70%, rgba(69,224,200,.4) 83%, transparent 92%); }
+.sky-css i:nth-child(3) { animation: sky-c 41s linear infinite alternate; height: 80%; filter: blur(22px);
+  background: linear-gradient(92deg, transparent 0, transparent 12%, color-mix(in srgb, var(--sky-tint) 60%, transparent) 20%,
+    transparent 27%, transparent 44%, color-mix(in srgb, var(--sky-tint) 55%, transparent) 55%, transparent 61%,
+    transparent 76%, color-mix(in srgb, var(--sky-tint) 60%, transparent) 86%, transparent 94%); }
+@keyframes sky-a { from { transform: translate3d(-9%, 0, 0) skewX(-5deg); } to { transform: translate3d(9%, 2%, 0) skewX(4deg); } }
+@keyframes sky-b { from { transform: translate3d(11%, 1%, 0) skewX(6deg); } to { transform: translate3d(-10%, 0, 0) skewX(-4deg); } }
+@keyframes sky-c { from { transform: translate3d(-14%, 0, 0) skewX(3deg); } to { transform: translate3d(12%, 3%, 0) skewX(-6deg); } }
+
+@layer theme-flourish {
+  /* base fills are unlayered, so the flourish re-points their tokens
+     instead of fighting the properties */
+  html:not([data-sky="off"]) { --c-app-bg: transparent; --c-sidebar-bg: rgba(14, 17, 40, .58);
+    --a-side-filter: blur(22px) saturate(1.2); }
+  /* sidebar treatments under comparison. The sky is brightest beside the
+     sidebar while thinking, so the labels need a floor the sky cannot lift:
+       glass - even translucent fill (the starting point)
+       frost - heavier blur that also caps the brightness behind the glass
+       shade - fill deepens toward the outer edge, where the labels start,
+               and stays open along the edge that meets the thread */
+  html[data-side="frost"]:not([data-sky="off"]) { --c-sidebar-bg: rgba(14, 17, 40, .5);
+    --a-side-filter: blur(40px) brightness(.62) saturate(1.15); }
+  html[data-side="shade"]:not([data-sky="off"]) {
+    --c-sidebar-bg: linear-gradient(90deg, rgba(11, 13, 32, .93) 0, rgba(11, 13, 32, .88) 45%,
+      rgba(12, 15, 36, .7) 80%, rgba(14, 17, 40, .46) 100%); }
+
+  /* the veil: holds the sky back from the reading column and the composer.
+     Its width follows the pane, so a narrower window still has open sky in
+     the margins instead of the veil's fade reaching past both edges. The
+     width is set through background-size because a gradient's own radius
+     does not accept clamp() with a percentage. */
+  html:not([data-sky="off"]) .main::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    /* one gradient for both views; only the box it is painted into changes,
+       so the shade widens and collapses smoothly between them. Vertically
+       it is a tall band on the thread (200% box) and a pool on the new chat. */
+    background-repeat: no-repeat; background-position: 50% 46%; background-size: clamp(84rem, 116%, 108rem) 200%;
+    transition: background-size 640ms cubic-bezier(.65, 0, .35, 1);
+    background-image: radial-gradient(ellipse 50% 50% at 50% 46%,
+      rgba(11, 13, 32, .84) 0, rgba(11, 13, 32, .84) 56%, rgba(11, 13, 32, .74) 64%, rgba(11, 13, 32, .52) 73%,
+      rgba(11, 13, 32, .27) 82%, rgba(11, 13, 32, .09) 91%, rgba(11, 13, 32, 0) 100%); }
+
+  /* surfaces under comparison: data-surface="solid" (the starting point)
+     or "glass". Glass is three different jobs here, and only one of them
+     needs a backdrop blur:
+       composer - a pane straight onto the sky. The veil is opened behind it
+                  (a feathered window cut with a mask), and since the sky is
+                  already soft and the thread never passes beneath it, a
+                  translucent fill is all the frost it needs. No filter.
+       cards    - bubble, sources, code, confirm. They sit on the veil, where
+                  nothing sharp is ever behind them, so they are lit panes:
+                  a light fill and an edge light. No filter.
+       floaters - menu, citation card, jump button. These do pass over text,
+                  so they carry a real blur. Their hosts carry none, so a
+                  floater always samples the page, never an empty backdrop. */
+  @media (prefers-reduced-transparency: no-preference) {
+    html[data-surface="glass"]:not([data-sky="off"]) {
+      /* the fill is as thin as the contrast floor allows at the sky's
+         brightest; the placeholder steps up one text tier to hold it */
+      --c-composer-bg: linear-gradient(180deg, rgba(30, 35, 76, .60), rgba(14, 17, 42, .70));
+      --c-composer-placeholder: var(--s-text-2);
+      --c-card-bg: rgba(255, 255, 255, .04);
+      --c-confirm-bg: color-mix(in srgb, var(--c-step-confirm) 8%, rgba(255, 255, 255, .04));
+      --c-bubble-user-bg: color-mix(in srgb, var(--p-aurora-teal) 16%, rgba(255, 255, 255, .05));
+      --c-code-bg: rgba(255, 255, 255, .035);
+      --c-float-bg: rgba(19, 23, 52, .5); }
+    html[data-surface="glass"]:not([data-sky="off"]) .composer-box {
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10), 0 12px 32px rgba(3, 4, 14, .32); }
+    html[data-surface="glass"]:not([data-sky="off"]) :is([data-part="bubble-user"], .sources, [data-part="code-block"], [data-part="confirm"]) {
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06), inset 0 1px 0 rgba(255, 255, 255, .09); }
+    html[data-surface="glass"]:not([data-sky="off"]) :is([data-part="citation-popover"], .model-menu, [data-part="jump-bottom"]) {
+      backdrop-filter: blur(14px) saturate(1.5) brightness(1.45); }
+    /* the window: everything, minus a feathered rectangle where the composer
+       sits. --pane-* are measured from the composer in script. */
+    html[data-surface="glass"]:not([data-sky="off"]) .main::before {
+      --feather: 26px;
+      mask-image: linear-gradient(#000 0 0),
+        linear-gradient(90deg, transparent, #000 var(--feather), #000 calc(100% - var(--feather)), transparent),
+        linear-gradient(180deg, transparent, #000 var(--feather), #000 calc(100% - var(--feather)), transparent);
+      mask-repeat: no-repeat;
+      mask-size: 100% 100%, var(--pane-w, 0px) var(--pane-h, 0px), var(--pane-w, 0px) var(--pane-h, 0px);
+      mask-position: 0 0, left var(--pane-x, 0px) bottom var(--pane-b, 0px), left var(--pane-x, 0px) bottom var(--pane-b, 0px);
+      mask-composite: exclude, intersect; }
+  }
+
+  /* new chat: a smaller, softer veil, just enough behind the greeting and
+     the composer; the rest of the pane is open sky */
+  html:not([data-sky="off"]) body[data-view="new"] .main::before { background-size: clamp(46rem, 88%, 74rem) 96%; }
+
+  /* the console: the rail is glass like the sidebar; the work column has
+     the thread's veil, cut to its own measure; the activity panel is the
+     heavier pane, with the running step's colour along its top edge, as
+     the topbar's horizon */
+  html:not([data-sky="off"]) .console-main::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(ellipse 50% 50% at 50% 46%,
+      rgba(11, 13, 32, .84) 0, rgba(11, 13, 32, .84) 56%, rgba(11, 13, 32, .74) 64%, rgba(11, 13, 32, .52) 73%,
+      rgba(11, 13, 32, .27) 82%, rgba(11, 13, 32, .09) 91%, rgba(11, 13, 32, 0) 100%) 50% 46% / clamp(66rem, 104%, 92rem) 200% no-repeat; }
+  html:not([data-sky="off"]) [data-part="console-rail"] {
+    backdrop-filter: var(--a-side-filter); -webkit-backdrop-filter: var(--a-side-filter);
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, .05); }
+  @media (prefers-reduced-transparency: no-preference) {
+    html[data-surface="glass"]:not([data-sky="off"]) {
+      --c-activity-bg: linear-gradient(180deg, rgba(30, 35, 76, .62), rgba(14, 17, 42, .72));
+      --c-input-bg: rgba(6, 8, 18, .45); }
+    html[data-surface="glass"]:not([data-sky="off"]) :is(.mm-row, .mm-loaded, .mm-banner) {
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06), inset 0 1px 0 rgba(255, 255, 255, .09); }
+    html[data-surface="glass"]:not([data-sky="off"]) [data-part="mm-activity"] {
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10), 0 12px 32px rgba(3, 4, 14, .32); }
+  }
+
+  /* the one glass surface */
+  html:not([data-sky="off"]) [data-part="sidebar"] {
+    backdrop-filter: var(--a-side-filter); -webkit-backdrop-filter: var(--a-side-filter);
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, .05); }
+  html:not([data-sky="off"]) [data-part="topbar"] { background: rgba(11, 13, 32, .7); }
+
+  /* the horizon: the topbar's lower edge takes the colour of the running
+     step. Two parts: a hot core line, and a bloom that falls onto the
+     thread and lifts faintly into the bar. Both breathe together, slowly.
+     It is the sky's tell on narrow screens, and (held still) the static
+     tell under reduced motion. */
+  [data-part="topbar"] { z-index: 2; }
+  [data-part="topbar"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+    pointer-events: none; opacity: 0; transition: opacity 900ms var(--ease-standard);
+    background: linear-gradient(90deg, transparent 0, var(--sky-tint) 16%,
+      color-mix(in srgb, var(--sky-tint) 45%, #fff) 50%, var(--sky-tint) 84%, transparent 100%);
+    box-shadow: 0 0 4px color-mix(in srgb, var(--sky-tint) 88%, transparent),
+                0 0 16px color-mix(in srgb, var(--sky-tint) 52%, transparent),
+                0 2px 32px color-mix(in srgb, var(--sky-tint) 26%, transparent); }
+  [data-part="topbar"]::before { content: ""; position: absolute; left: 0; right: 0; top: calc(100% - 44px); height: 132px;
+    z-index: -1; pointer-events: none; opacity: 0; transition: opacity 900ms var(--ease-standard);
+    background:
+      radial-gradient(ellipse 32% 22% at 50% 44px, color-mix(in srgb, var(--sky-tint) 25%, transparent), transparent 100%),
+      radial-gradient(ellipse 60% 33% at 50% 44px, color-mix(in srgb, var(--sky-tint) 13%, transparent), transparent 100%); }
+  body:not([data-state="idle"]):not([data-state="done"]) [data-part="topbar"]::after { opacity: 1;
+    animation: horizon-line 5.2s ease-in-out infinite; }
+  body:not([data-state="idle"]):not([data-state="done"]) [data-part="topbar"]::before { opacity: 1;
+    animation: horizon-breathe 5.2s ease-in-out infinite; }
+  @keyframes horizon-line { 50% { opacity: .74; } }
+  @keyframes horizon-breathe { 50% { opacity: .62; } }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root { --c-sidebar-bg: var(--s-bg-panel) !important; }
+  html:not([data-sky="off"]) [data-part="sidebar"] {
+    backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+}
+
+/* ---------- narrow layout ---------- */
+.scrim { display: none; }
+@media (max-width: 760px) {
+  :root { --rail-time: 0px; --rail-gap: 8px; --text-body: 16px; --gutter: 0px; }
+  .step { grid-template-columns: var(--rail-glyph) minmax(0, 1fr); }
+  .turn-user .step { padding-left: 0; }
+  .step-time { display: none; }
+  .turn-user .step-body { max-width: 92%; }
+  :root { --c-sidebar-bg: var(--s-bg-panel) !important; }
+  [data-part="sidebar"] { position: fixed; inset: 0 auto 0 0; z-index: 45; width: min(300px, 86vw);
+    transform: translateX(-102%); transition: transform var(--dur-slow) var(--ease-entrance); backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  body[data-nav] [data-part="sidebar"] { transform: none; }
+  body[data-nav] .scrim { display: block; position: fixed; inset: 0; z-index: 44; background: var(--s-scrim); }
+  [data-part="thread"] { padding: 20px 14px 40px; }
+  [data-part="composer"] { padding: 0 10px 10px; }
+  [data-part="model-status"] .ms-state, [data-part="model-status"] .ms-name { display: none; }
+  [data-part="topbar"] { padding-right: 16px; }
+  .chip .lbl, .meta-model { display: none; }
+  .composer-row { gap: 2px; }
+  [data-part="model-select"] { min-width: 0; }
+  [data-part="model-select"] .chip { max-width: 100%; }
+  #model-name { overflow: hidden; text-overflow: ellipsis; }
+  .tool-query { display: none; }
+  .model-menu { width: min(300px, calc(100vw - 40px)); }
+  .hint { display: none; }
+}
+@media (min-width: 761px) {
+  body[data-nav-collapsed] [data-part="sidebar"] { display: none; }
+}
+
+/* ---------- 9. Prototype harness chrome (not part of the app) ---------- */
+.harness { position: fixed; right: 12px; top: 60px; z-index: 50; width: 216px; font-size: 12px;
+  background: var(--p-night-2); border: 1px solid var(--s-border-strong); border-radius: var(--radius-m);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .4); }
+.harness summary { list-style: none; cursor: pointer; padding: 8px 12px; font-weight: 600; color: var(--s-text-2);
+  display: flex; justify-content: space-between; }
+.harness summary::-webkit-details-marker { display: none; }
+.harness-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.harness h3 { font-size: 11px; font-weight: 500; color: var(--s-text-3); margin-top: 2px; }
+.harness-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.hbtn { border: 1px solid var(--s-border-strong); border-radius: 6px; padding: 3px 8px; font-size: 11px; color: var(--s-text-2); }
+.hbtn:hover { background: var(--p-night-1); }
+.hbtn[aria-pressed="true"] { background: var(--s-accent); color: var(--s-on-accent); border-color: var(--s-accent); }
+.hbtn-play { background: var(--s-accent); color: var(--s-on-accent); font-weight: 600; padding: 6px 10px; border-radius: 6px; }
+.harness output { font-family: var(--font-mono); font-size: 11px; color: var(--s-text-3); }
+@media (max-width: 760px) { .harness { top: 54px; right: 6px; width: 190px; } }
+</style>
+</head>
+<body data-state="idle" data-view="thread">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-logo" viewBox="0 0 16 16"><path d="M2 11c2-6 4-8 6-8s4 2 6 8"/><path d="M5 12.5c1-3.5 2-4.5 3-4.5s2 1 3 4.5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M6.2 3v10"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 16 16"><path d="M6 2.5h4M7 2.7v3.6L4.8 8.9h6.4L9 6.3V2.7M8 8.9v4.1"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></symbol>
+  <symbol id="i-thought" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.4"/></symbol>
+  <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2L13.5 13.5"/></symbol>
+  <symbol id="i-answer" viewBox="0 0 16 16"><path d="M3 4.5h10M3 8h10M3 11.5h6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></symbol>
+  <symbol id="i-gate" viewBox="0 0 16 16"><path d="M8 2.5l5 2v3.6c0 2.6-2 4.6-5 5.4-3-.8-5-2.8-5-5.4V4.5z"/></symbol>
+  <symbol id="i-x" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M6 6l4 4M10 6l-4 4"/></symbol>
+  <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M8 7.4v3.2M8 5.2v.2"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 16 16"><path d="M11.3 2.7l2 2L5.5 12.5 3 13l.5-2.5z"/><path d="M9.8 4.2l2 2"/></symbol>
+  <symbol id="i-reply" viewBox="0 0 16 16"><path d="M6.5 3.8L2.8 7.5l3.7 3.7"/><path d="M2.8 7.5h6.4a3.8 3.8 0 0 1 3.8 3.8v1.2"/></symbol>
+  <symbol id="i-quote" viewBox="0 0 16 16"><path d="M6.5 4.5h-3v3h3V10a2 2 0 0 1-2 2M13 4.5h-3v3h3V10a2 2 0 0 1-2 2"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 16 16"><path d="M13.2 8.6A5.3 5.3 0 1 1 12.4 5"/><path d="M13.3 2.2v3.2h-3.2"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.8"/><path d="M10.5 5.5V4.3a1.8 1.8 0 0 0-1.8-1.8H4.3a1.8 1.8 0 0 0-1.8 1.8v4.4a1.8 1.8 0 0 0 1.8 1.8h1.2"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 16 16"><path d="M13 7.5l-5 5a3.2 3.2 0 0 1-4.5-4.5l5.3-5.3a2.1 2.1 0 0 1 3 3L6.6 10.9a1 1 0 0 1-1.5-1.5L9.8 4.8"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><path d="M2.5 8h11M8 2.5c1.8 1.6 2.6 3.4 2.6 5.5S9.8 11.9 8 13.5C6.2 11.9 5.4 10.1 5.4 8S6.2 4.1 8 2.5z"/></symbol>
+  <symbol id="i-up" viewBox="0 0 16 16"><path d="M8 13V3.5M4 7.2l4-4 4 4"/></symbol>
+  <symbol id="i-file" viewBox="0 0 16 16"><path d="M4 2.5h5l3 3v8H4z"/><path d="M9 2.5v3h3"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 16 16"><path d="M6 2.5v3M10 2.5v3M4.5 5.5h7v2.3a3.5 3.5 0 0 1-7 0zM8 11.3v2.2"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 16 16"><path d="M2.5 5h6M11.5 5h2M2.5 11h2M7.5 11h6"/><circle cx="10" cy="5" r="1.5"/><circle cx="6" cy="11" r="1.5"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 16 16"><path d="M13 9.4A5.5 5.5 0 0 1 6.6 3 5.5 5.5 0 1 0 13 9.4z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 16 16"><path d="M10 3L5 8l5 5"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 16 16"><path d="M8 2.5l6 10.5H2z"/><path d="M8 7v3M8 12v.2"/></symbol>
+</svg>
+
+<div class="sky" aria-hidden="true">
+  <canvas id="sky-gl"></canvas>
+  <canvas id="sky-stars"></canvas>
+  <div class="sky-css"><i></i><i></i><i></i></div>
+</div>
+
+<div class="boot" id="boot" aria-live="polite" aria-busy="true">
+  <canvas class="boot-chart" id="boot-chart" aria-hidden="true"></canvas>
+  <div class="boot-mark"><svg class="i" viewBox="0 0 16 16" aria-hidden="true">
+    <path pathLength="1" d="M2 11c2-6 4-8 6-8s4 2 6 8"/><path pathLength="1" d="M5 12.5c1-3.5 2-4.5 3-4.5s2 1 3 4.5"/></svg></div>
+  <div class="boot-name">AI Chatbot Platform</div>
+  <h1 class="boot-head" id="boot-head">Reaching the <em>backend</em></h1>
+  <p class="boot-sub" id="boot-sub"></p>
+  <ol class="boot-rail" id="boot-rail" style="--lit: 0">
+    <li class="boot-node" data-step="pending"><span class="boot-dot"><svg class="i"><use href="#i-check"/></svg></span>
+      <span><span class="boot-label">Backend</span><small></small></span></li>
+    <li class="boot-node" data-step="pending"><span class="boot-dot"><svg class="i"><use href="#i-check"/></svg></span>
+      <span><span class="boot-label">Model runtime</span><small></small></span></li>
+    <li class="boot-node" data-step="pending"><span class="boot-dot"><svg class="i"><use href="#i-check"/></svg></span>
+      <span><span class="boot-label">Conversations</span><small></small></span></li>
+  </ol>
+  <div class="boot-slow" id="boot-slow" hidden>
+    <p>The model runtime is taking longer than usual to answer. If the stack was just started it may still be
+      coming up; otherwise check that the model service is running.</p>
+    <button class="btn btn-ghost" id="boot-retry">Try again</button>
+  </div>
+</div>
+
+<div class="login" id="login">
+  <div class="login-card">
+    <div class="login-mark"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-logo"/></svg></div>
+    <div class="login-name">AI Chatbot Platform</div>
+    <h1 class="login-head" id="login-head">Sign in to <em>continue</em></h1>
+    <p class="login-lede" id="login-lede">Use a workspace account. You will be sent to your identity provider and brought back here.</p>
+    <button class="btn btn-primary login-btn" id="login-btn">Sign in with Google</button>
+  </div>
+</div>
+
+<div class="app">
+  <!-- ============ sidebar ============ -->
+  <nav data-part="sidebar" aria-label="Conversations">
+    <div class="brand"><svg class="i" id="brand-mark"><use href="#i-logo"/></svg>AI Chatbot Platform</div>
+    <button class="new-chat"><svg class="i"><use href="#i-plus"/></svg>New chat</button>
+    <div class="side-scroll">
+      <div class="side-label">Pinned</div>
+      <button class="convo"><svg class="i"><use href="#i-pin"/></svg><span>Platform architecture notes</span></button>
+      <button class="convo"><svg class="i"><use href="#i-pin"/></svg><span>Runbook: restoring the vector store</span></button>
+      <div class="side-label">Recent</div>
+      <button class="convo" aria-current="true"><span>Vector store cutover checklist</span></button>
+      <button class="convo"><span>Summarize the release notes PDF</span></button>
+      <button class="convo"><span>Weekly metrics query help</span></button>
+      <button class="convo"><span>Draft: onboarding doc outline</span></button>
+    </div>
+    <div class="side-foot">
+      <button class="convo"><svg class="i"><use href="#i-plug"/></svg><span>Integrations</span></button>
+      <button class="convo" id="side-settings"><svg class="i"><use href="#i-gear"/></svg><span>Settings</span></button>
+      <button class="convo"><svg class="i"><use href="#i-moon"/></svg><span>Theme: Aurora</span></button>
+    </div>
+  </nav>
+  <div class="scrim" id="scrim"></div>
+
+  <!-- ============ main column ============ -->
+  <div class="main">
+    <header data-part="topbar">
+      <button class="icon-btn" id="nav-toggle" aria-label="Toggle sidebar"><svg class="i"><use href="#i-panel"/></svg></button>
+      <span class="title">Vector store cutover checklist</span>
+      <span data-part="model-status" data-model-state="memory" id="model-status" role="status">
+        <span class="t-matrix" data-variant="scan" style="--mx: var(--s-warn)"></span>
+        <span class="ms-dot"></span>
+        <span class="ms-name" id="ms-name">qwen3:4b-instruct</span>
+        <span class="ms-state" id="ms-state">in memory</span>
+      </span>
+    </header>
+
+    <section class="welcome" id="welcome" aria-label="New chat">
+      <h1 class="welcome-head">What shall we shed <em>light</em> on?</h1>
+      <ul class="reach">
+        <li><svg class="i"><use href="#i-search"/></svg><b>Knowledge base</b> 128 documents</li>
+        <li><svg class="i"><use href="#i-globe"/></svg><b>Web search</b> <span id="reach-web">on</span></li>
+        <li><svg class="i"><use href="#i-plug"/></svg><b>Tools</b> 3 connected</li>
+      </ul>
+    </section>
+
+    <main data-part="thread" id="thread">
+      <div class="thread-inner">
+
+        <!-- A1: answered from model knowledge + honesty notice -->
+        <div class="turn turn-user">
+          <div class="step">
+            <span class="step-time">14:26</span><span class="step-glyph"></span>
+            <div class="step-body"><div data-part="bubble-user">Quick one: what does a vector database actually store?</div>
+            <div class="msg-actions">
+              <button class="act-btn" title="Edit" aria-label="Edit"><svg class="i"><use href="#i-edit"/></svg><span>Edit</span></button>
+              <button class="act-btn" title="Reply" aria-label="Reply"><svg class="i"><use href="#i-reply"/></svg><span>Reply</span></button>
+              <button class="copy-btn" title="Copy" aria-label="Copy"><span class="ic"><svg class="i cp"><use href="#i-copy"/></svg><svg class="i ok"><use href="#i-check"/></svg></span><span class="copy-lbl">Copy</span></button>
+            </div></div>
+          </div>
+        </div>
+        <div class="turn" data-part="bubble-assist">
+          <div class="step" data-kind="answer">
+            <span class="step-time">+1s</span><span class="step-glyph"><svg class="i"><use href="#i-answer"/></svg></span>
+            <div class="step-body">
+              <div data-part="content">
+                <p>A vector database stores embeddings: fixed-length arrays of numbers that represent the meaning of a
+                piece of text, an image, or any other content. Each stored point pairs the vector with a payload of
+                metadata, and a query finds the stored vectors closest to the query vector instead of matching exact
+                keywords.</p>
+              </div>
+            </div>
+          </div>
+          <div class="step step-end" data-kind="end">
+            <span class="step-time">+4s</span><span class="step-glyph"><svg class="i"><use href="#i-check"/></svg></span>
+            <div class="step-body">
+              <div data-part="notice"><svg class="i"><use href="#i-info"/></svg><span><b>Answered from the model's own knowledge.</b> It did
+                not search the web or the knowledge base, so time-sensitive details may be out of date.</span></div>
+              <div data-part="turn-actions">
+                <button class="copy-btn" title="Copy answer" aria-label="Copy answer"><span class="ic"><svg class="i cp"><use href="#i-copy"/></svg><svg class="i ok"><use href="#i-check"/></svg></span><span class="copy-lbl">Copy answer</span></button>
+                <button class="act-btn" title="Reply" aria-label="Reply"><svg class="i"><use href="#i-reply"/></svg><span>Reply</span></button>
+                <button class="act-btn" title="Answer again" aria-label="Answer again"><svg class="i"><use href="#i-redo"/></svg><span>Answer again</span></button>
+                <span class="turn-meta"><span class="meta-model">qwen3:4b-instruct</span><span class="meta-num">71 tokens</span><span class="meta-num">24 tokens/s</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- A2: full completed turn -->
+        <div class="turn turn-user">
+          <div class="step">
+            <span class="step-time">14:32</span><span class="step-glyph"></span>
+            <div class="step-body"><div data-part="bubble-user">We are moving the vector store to a new host this weekend.
+              What should I double-check before the cutover?<br>
+              <span class="attach-chip"><svg class="i"><use href="#i-file"/></svg>cutover-plan.md</span></div>
+            <div class="msg-actions">
+              <button class="act-btn" title="Edit" aria-label="Edit"><svg class="i"><use href="#i-edit"/></svg><span>Edit</span></button>
+              <button class="act-btn" title="Reply" aria-label="Reply"><svg class="i"><use href="#i-reply"/></svg><span>Reply</span></button>
+              <button class="copy-btn" title="Copy" aria-label="Copy"><span class="ic"><svg class="i cp"><use href="#i-copy"/></svg><svg class="i ok"><use href="#i-check"/></svg></span><span class="copy-lbl">Copy</span></button>
+            </div></div>
+          </div>
+        </div>
+        <div class="turn" data-part="bubble-assist">
+          <div class="step" data-kind="thought" data-part="thinking">
+            <span class="step-time">+6s</span><span class="step-glyph"><svg class="i"><use href="#i-thought"/></svg></span>
+            <div class="step-body">
+              <button class="disc-btn" aria-expanded="false"><span>Thought for 6 seconds</span><svg class="i chev"><use href="#i-chev"/></svg></button>
+              <div class="disc-panel"><div><p class="think-body">The user attached a cutover plan and asked about
+                preparation. The knowledge base has migration notes; searching it first, then grounding the answer in
+                both.</p></div></div>
+            </div>
+          </div>
+          <div class="step" data-kind="tool" data-part="tool-trace">
+            <span class="step-time">+8s</span><span class="step-glyph"><svg class="i"><use href="#i-search"/></svg></span>
+            <div class="step-body">
+              <button class="disc-btn" aria-expanded="true"><span class="tool-label">Searched the knowledge base</span>
+                <span class="tool-query">vector store migration checklist</span><span class="tool-meta">2 sources</span>
+                <svg class="i chev"><use href="#i-chev"/></svg></button>
+              <div class="disc-panel"><div><ol class="sources">
+                <li><span class="n">1</span><span class="src-title">Migration notes<small>migration-notes.md</small></span>
+                  <span class="src-snip">Snapshot the collection and restore it on the target before decommissioning the source.</span></li>
+                <li><span class="n">2</span><span class="src-title">Embedding configuration<small>embedding-config.md</small></span>
+                  <span class="src-snip">Stored vectors are only comparable under the embedding model and version that produced them.</span></li>
+              </ol></div></div>
+            </div>
+          </div>
+          <div class="step" data-kind="answer">
+            <span class="step-time">+9s</span><span class="step-glyph"><svg class="i"><use href="#i-answer"/></svg></span>
+            <div class="step-body">
+              <div data-part="content">
+                <p>Based on your attached plan and the migration notes in the knowledge base, double-check these before
+                the window opens:</p>
+                <ul>
+                  <li><b>Snapshot first.</b> Take a full collection snapshot and verify it restores on the new host
+                    before touching the old one.<span class="cite-mark">1</span></li>
+                  <li><b>Pin the embedder.</b> Vectors are only comparable if the new host serves the same embedding
+                    model and version; a silent model change strands every stored vector.<span class="cite-mark">2</span></li>
+                  <li><b>Re-point by config, not by code.</b> The connection URL lives in <code>.env</code>, so the
+                    cutover should be one variable change:</li>
+                </ul>
+                <div data-part="code-block">
+                  <div class="code-head"><span>bash</span>
+                    <button class="copy-btn"><span class="ic"><svg class="i cp"><use href="#i-copy"/></svg><svg class="i ok"><use href="#i-check"/></svg></span><span class="copy-lbl">Copy</span></button></div>
+<pre><code><span class="tk-c"># point the app at the new host, then restart it</span>
+<span class="tk-k">export</span> QDRANT_URL=<span class="tk-s">"https://new-host:6333"</span>
+<span class="tk-f">make</span> deploy
+
+<span class="tk-c"># known-answer check: expect a top score above 0.80</span>
+<span class="tk-f">curl</span> -s <span class="tk-s">"$QDRANT_URL/collections/docs"</span> | <span class="tk-f">jq</span> <span class="tk-s">'.result.points_count'</span>   <span class="tk-c"># 48213</span>
+<span class="tk-k">if</span> [ $? -ne <span class="tk-n">0</span> ]; <span class="tk-k">then</span> <span class="tk-f">echo</span> <span class="tk-s">"roll back: restore the old value"</span>; <span class="tk-k">fi</span></code></pre>
+                </div>
+                <p>After cutover, run a known-answer retrieval query and compare scores against the old host before
+                closing the window.<span class="cite-mark">1</span></p>
+              </div>
+            </div>
+          </div>
+          <div class="step step-end" data-kind="end">
+            <span class="step-time">+20s</span><span class="step-glyph"><svg class="i"><use href="#i-check"/></svg></span>
+            <div class="step-body">
+              <div data-part="citations">
+                <button class="cite-chip"><b>1</b>migration-notes.md</button>
+                <button class="cite-chip"><b>2</b>embedding-config.md</button>
+              </div>
+              <div data-part="turn-actions">
+                <button class="copy-btn" title="Copy answer" aria-label="Copy answer"><span class="ic"><svg class="i cp"><use href="#i-copy"/></svg><svg class="i ok"><use href="#i-check"/></svg></span><span class="copy-lbl">Copy answer</span></button>
+                <button class="act-btn" title="Reply" aria-label="Reply"><svg class="i"><use href="#i-reply"/></svg><span>Reply</span></button>
+                <button class="act-btn" title="Answer again" aria-label="Answer again"><svg class="i"><use href="#i-redo"/></svg><span>Answer again</span></button>
+                <span class="turn-meta"><span class="meta-model">qwen3:4b-instruct</span><span class="meta-num">412 tokens</span><span class="meta-num">38 tokens/s</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- B: the LIVE turn, driven by the harness -->
+        <div class="turn turn-user">
+          <div class="step">
+            <span class="step-time">14:41</span><span class="step-glyph"></span>
+            <div class="step-body"><div data-part="bubble-user">Great. Draft the maintenance-window announcement and post
+              it to the status page.</div>
+            <div class="msg-actions">
+              <button class="act-btn" title="Edit" aria-label="Edit"><svg class="i"><use href="#i-edit"/></svg><span>Edit</span></button>
+              <button class="act-btn" title="Reply" aria-label="Reply"><svg class="i"><use href="#i-reply"/></svg><span>Reply</span></button>
+              <button class="copy-btn" title="Copy" aria-label="Copy"><span class="ic"><svg class="i cp"><use href="#i-copy"/></svg><svg class="i ok"><use href="#i-check"/></svg></span><span class="copy-lbl">Copy</span></button>
+            </div></div>
+          </div>
+        </div>
+        <div class="turn live" data-part="bubble-assist" aria-live="polite">
+          <div class="step" data-live="waiting">
+            <span class="step-time"></span><span class="step-glyph"><span class="t-matrix" data-variant="twinkle"></span></span>
+            <div class="step-body"><div class="wait-row"><span class="swap">
+              <span id="wait-a">Sending to qwen3:4b-instruct</span>
+              <span id="wait-b" hidden>Waiting for qwen3:4b-instruct to load</span></span></div></div>
+          </div>
+          <div class="step" data-kind="thought" data-part="thinking" data-live="thinking">
+            <span class="step-time" id="t-think">+2s</span>
+            <span class="step-glyph"><svg class="i" id="g-think"><use href="#i-thought"/></svg><span class="t-matrix" id="l-think" data-variant="orbit" data-rounded="true" style="--mx: var(--c-step-thought)"></span></span>
+            <div class="step-body">
+              <button class="disc-btn" aria-expanded="true" id="think-btn"><span id="think-label">Thinking</span><span class="tag-live">thinking</span><svg class="i chev"><use href="#i-chev"/></svg></button>
+              <div class="disc-panel"><div><p class="think-body">Posting to the status page changes external state, so
+                that call needs approval. Drafting the announcement text first, then proposing the post.</p></div></div>
+            </div>
+          </div>
+          <div class="step" data-kind="tool" data-part="tool-trace" data-live="tool">
+            <span class="step-time" id="t-tool">+5s</span>
+            <span class="step-glyph"><svg class="i" id="g-tool"><use href="#i-search"/></svg><span class="t-matrix" id="l-tool" data-variant="scan" style="--mx: var(--c-step-tool)"></span></span>
+            <div class="step-body">
+              <div class="disc-btn" style="cursor:default"><span class="tool-label" id="tool-label">Searching the knowledge base</span>
+                <span class="tool-query">previous maintenance announcements</span><span class="tool-meta" id="tool-meta"></span></div>
+            </div>
+          </div>
+          <div class="step" data-kind="confirm" data-live="confirm">
+            <span class="step-time">+7s</span><span class="step-glyph"><svg class="i"><use href="#i-gate"/></svg></span>
+            <div class="step-body">
+              <div data-part="confirm">
+                <div class="confirm-head">Post this update to the status page?</div>
+                <div class="confirm-sub">It will be visible to all subscribers. Tool: <code>post_status_update</code></div>
+                <dl class="confirm-detail">
+                  <dt>Title</dt><dd>Scheduled maintenance - vector store migration</dd>
+                  <dt>Window</dt><dd>Sat 22:00-23:30 UTC</dd>
+                  <dt>Audience</dt><dd>All subscribers</dd>
+                </dl>
+                <div class="confirm-actions">
+                  <button class="btn btn-primary" id="approve">Post update</button>
+                  <button class="btn btn-ghost" id="deny">Do not post</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="step" data-kind="answer" data-live="content">
+            <span class="step-time">+9s</span><span class="step-glyph"><svg class="i"><use href="#i-answer"/></svg></span>
+            <div class="step-body"><div data-part="content"><p id="live-text"></p></div></div>
+          </div>
+          <div class="step step-end" data-kind="error" data-live="error">
+            <span class="step-time">+39s</span><span class="step-glyph"><svg class="i"><use href="#i-x"/></svg></span>
+            <div class="step-body">
+              <div data-part="error" role="alert"><span>The status page did not respond within 30 seconds.</span>
+                <button class="btn btn-ghost">Try again</button>
+                <small>Nothing was posted. The draft above is unchanged.</small></div>
+            </div>
+          </div>
+          <div class="step step-end" data-kind="end" data-live="done">
+            <span class="step-time">+13s</span><span class="step-glyph"><svg class="i"><use href="#i-check"/></svg></span>
+            <div class="step-body">
+              <div data-part="citations" id="live-cites"><button class="cite-chip"><b>1</b>announcement-style.md</button></div>
+              <div data-part="turn-actions">
+                <button class="copy-btn" title="Copy answer" aria-label="Copy answer"><span class="ic"><svg class="i cp"><use href="#i-copy"/></svg><svg class="i ok"><use href="#i-check"/></svg></span><span class="copy-lbl">Copy answer</span></button>
+                <button class="act-btn" title="Reply" aria-label="Reply"><svg class="i"><use href="#i-reply"/></svg><span>Reply</span></button>
+                <button class="act-btn" title="Answer again" aria-label="Answer again"><svg class="i"><use href="#i-redo"/></svg><span>Answer again</span></button>
+                <span class="turn-meta"><span class="live-model meta-model">qwen3:4b-instruct</span><span class="meta-num">58 tokens</span><span class="meta-num">23 tokens/s</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <footer data-part="composer">
+      <button data-part="jump-bottom" id="jump" aria-label="Scroll to latest" tabindex="-1"><svg class="i"><use href="#i-up"/></svg><i></i></button>
+      <div class="composer-wrap">
+        <div data-part="composer-notice" id="cn" role="status"><div><div class="cn-box">
+          <span class="t-matrix" data-variant="scan"></span>
+          <div class="cn-text"><b id="cn-title"></b><span id="cn-sub"></span></div>
+          <button class="icon-btn" id="cn-close" aria-label="Dismiss"><svg class="i"><use href="#i-plus" transform="rotate(45 8 8)"/></svg></button>
+        </div></div></div>
+        <div class="composer-box">
+          <textarea class="composer-input" rows="1" placeholder="Ask a question, or paste something to work on" aria-label="Message"></textarea>
+          <div class="composer-row">
+            <button class="chip" aria-label="Attach a file"><svg class="i"><use href="#i-clip"/></svg></button>
+            <button class="chip" id="think-chip" aria-pressed="false"><svg class="i"><use href="#i-thought"/></svg><span class="lbl">Thinking: Auto</span></button>
+            <button class="chip" id="web-chip" aria-pressed="true"><svg class="i"><use href="#i-globe"/></svg><span class="lbl">Web search</span></button>
+            <div data-part="model-select" id="model-select">
+              <button class="chip" id="model-btn" aria-haspopup="menu" aria-expanded="false"><span id="model-name">qwen3:4b-instruct</span><svg class="i chev"><use href="#i-chev"/></svg></button>
+              <menu class="model-menu" id="model-menu">
+                <li><button class="model-opt" aria-current="true" data-loaded>qwen3:4b-instruct<em>in memory</em><span>Chat - fast, answers directly</span></button></li>
+                <li><button class="model-opt" data-both>qwen3:4b<em>on disk</em><span>Thinking - reasons before answering</span></button></li>
+                <li><button class="model-opt">qwen3-vl:2b<em>on disk</em><span>Vision - reads images on demand</span></button></li>
+              </menu>
+            </div>
+            <button class="send" id="send" aria-label="Send"><svg class="i"><use href="#i-up"/></svg><span class="stop"></span></button>
+          </div>
+        </div>
+        <div class="hint">Local model. Answers can be wrong, so check the sources.</div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ============ console ============ -->
+  <div class="console" data-part="console">
+    <header data-part="topbar">
+      <button class="console-back" id="console-back"><svg class="i"><use href="#i-back"/></svg>Back to chat</button>
+      <span class="title">Console</span>
+    </header>
+    <div class="console-body">
+      <nav data-part="console-rail" aria-label="Console sections">
+        <a class="console-rail-item" aria-current="page" href="#">Model manager</a>
+        <a class="console-rail-item" href="#">Knowledge</a>
+        <a class="console-rail-item" href="#">Integrations</a>
+        <a class="console-rail-item" href="#">Workspace defaults</a>
+        <a class="console-rail-item" href="#">Members</a>
+      </nav>
+      <div class="console-main">
+        <main class="console-scroll" id="console-scroll">
+          <div data-part="model-manager">
+
+            <div class="mm-banner warn">
+              <p class="mm-gap-title"><svg class="i"><use href="#i-warn"/></svg>No installed model is cleared to use tools</p>
+              <p class="mm-gap-body">Every installed model whose template could take tools is held at deterministic by policy (2 of them), so no turn
+                is handed a tool. Each card says which axis clamps it - a declaration or a passing check lifts one, where downloading more of the
+                same would not.</p>
+            </div>
+
+            <header class="mm-header">
+              <div class="mm-headline">
+                <h1 class="mm-title">Model manager</h1>
+                <p class="mm-meta">Ollama 0.12.3 - GPU profile - 8 GB card</p>
+              </div>
+              <section class="mm-loaded" aria-label="Loaded now">
+                <h2 class="mm-loaded-title">Loaded now</h2>
+                <div class="mm-loaded-row"><span class="ms-dot"></span><code>qwen3:4b-instruct</code><small>3.3 GB on GPU</small></div>
+                <div class="mm-loaded-row"><span class="ms-dot"></span><code>nomic-embed-text</code><small>0.4 GB on GPU</small></div>
+              </section>
+            </header>
+
+            <!-- the one long operation: three renderings of the same panel, one shown by the harness -->
+            <section data-part="mm-activity" id="act-pull" data-running hidden>
+              <div class="mm-activity-head">
+                <h2 class="mm-activity-title">Downloading <code class="mm-tag">qwen3:8b</code></h2>
+                <button class="btn btn-ghost">Pause</button>
+              </div>
+              <p class="mm-note" aria-live="polite">pulling 6e4c38e1f3b6</p>
+              <div class="mm-bar" role="progressbar" aria-label="Downloading qwen3:8b" aria-valuemin="0" aria-valuemax="100" aria-valuenow="42"><i id="pull-bar" style="width: 42.6%"></i></div>
+              <p class="mm-meta" id="pull-meta">42.6% - 2.1 GB of 5.0 GB</p>
+              <p class="mm-hint">Pausing is safe: the download is content-addressed and resumes from where it stopped.</p>
+            </section>
+            <section data-part="mm-activity" id="act-paused" hidden>
+              <div class="mm-activity-head">
+                <h2 class="mm-activity-title">Paused <code class="mm-tag">qwen3:8b</code></h2>
+                <span class="mm-activity-verbs"><button class="btn btn-primary">Resume</button><button class="btn btn-ghost">Dismiss</button></span>
+              </div>
+              <p class="mm-note">Paused at 42% - 2.1 GB of 5.0 GB kept. Resuming continues from here.</p>
+              <div class="mm-bar" role="progressbar" aria-label="Downloading qwen3:8b" aria-valuemin="0" aria-valuemax="100" aria-valuenow="42"><i style="width: 42.6%"></i></div>
+            </section>
+            <section data-part="mm-activity" id="act-check" data-running hidden>
+              <div class="mm-activity-head">
+                <h2 class="mm-activity-title">Checking <code class="mm-tag">qwen3:8b</code></h2>
+                <!-- a check can be stopped, not paused: the backend's abort must re-warm the chat model and the
+                     embedder the way the stream's own terminal frame does, or the hint below is not true -->
+                <button class="btn btn-ghost">Stop</button>
+              </div>
+              <p class="mm-note ok">Downloaded. A quick tool check follows on the same connection.</p>
+              <div class="mm-bar" role="progressbar" aria-label="Checking qwen3:8b" aria-valuemin="0" aria-valuemax="100" aria-valuenow="27"><i id="check-bar" style="width: 27%"></i></div>
+              <p class="mm-meta" id="check-meta">7/26 samples</p>
+              <p class="mm-hint">Stopping discards this run: the last verdict stands, and the chat model reloads on the next turn.</p>
+              <ul class="mm-cases" id="check-cases"></ul>
+            </section>
+
+            <section class="mm-section">
+              <h2 class="mm-section-title">Add a model</h2>
+              <p class="mm-section-note">The registry cannot be browsed, so a model is named rather than picked. Checking availability asks the
+                registry whether the name exists and what the download would cost.</p>
+              <div class="mm-addbox">
+                <input class="mm-input" value="qwen3:8b" aria-label="Model name" placeholder="qwen3:8b">
+                <button class="btn btn-ghost">Check availability</button>
+                <button class="btn btn-primary">Pull</button>
+              </div>
+              <p class="mm-measured"><b>qwen3:8b</b> is in the registry: <b>5.0 GB</b> to download, Q4_K_M, 40,960-token window.</p>
+              <p class="mm-hint">A quick tool check runs automatically once a chat model finishes downloading, so its agency verdict is measured
+                rather than assumed.</p>
+            </section>
+
+            <section class="mm-section">
+              <h2 class="mm-section-title">Chat models</h2>
+              <ul class="mm-list">
+                <li class="mm-row">
+                  <div class="mm-head">
+                    <button class="mm-summary" aria-expanded="true">
+                      <span class="mm-name"><code class="mm-tag">qwen3:4b-instruct</code><span class="badge cap">Default</span></span>
+                      <span class="mm-state ok"><span class="sr">Weights: </span>Installed</span>
+                      <span class="mm-state ok"><span class="sr">Tool check: </span>Checked</span>
+                      <span class="mm-chevron"><svg class="i"><use href="#i-chev"/></svg></span>
+                    </button>
+                    <span class="mm-action"></span>
+                  </div>
+                  <div class="mm-body">
+                    <dl class="mm-facts">
+                      <div class="mm-fact"><dt>Provider</dt><dd>Ollama</dd></div>
+                      <div class="mm-fact"><dt>Family</dt><dd>qwen3</dd></div>
+                      <div class="mm-fact"><dt>Parameters</dt><dd>4.0B</dd></div>
+                      <div class="mm-fact"><dt>Quantization</dt><dd>Q4_K_M</dd></div>
+                      <div class="mm-fact"><dt>Context window</dt><dd>16,384 tokens</dd></div>
+                      <div class="mm-fact"><dt>Model's own ceiling</dt><dd>40,960 tokens</dd></div>
+                      <div class="mm-fact"><dt>On disk</dt><dd>2.5 GB</dd></div>
+                      <div class="mm-fact"><dt>Digest</dt><dd><code>a2af6cc3eb7f</code></dd></div>
+                    </dl>
+                    <div class="mm-chips">
+                      <span class="mm-chip cap">Tools</span><span class="mm-chip cap">Thinking with tools</span><span class="mm-chip">Chat</span><span class="mm-chip">Instruct</span>
+                    </div>
+                    <div class="mm-zone">
+                      <p class="mm-overline">Tool check</p>
+                      <p class="mm-measured"><b>9.5 tok/s</b> - <b>2.4 GB</b> VRAM - deep check, 20 Jul 2026</p>
+                      <p class="mm-verdict">Held at deterministic</p>
+                      <p class="mm-verdict-gloss">The check earned assisted: it calls the tool it is told to, with the right arguments, most of the
+                        time. A policy declaration holds it at deterministic, so web search keeps the pre-fetch in front of it.</p>
+                      <div class="mm-tallies">
+                        <span class="mm-tally">call <b>6/6</b></span><span class="mm-tally">args <b>5/6</b></span>
+                        <span class="mm-tally">chain <b>4/6</b></span><span class="mm-tally">refuse <b>6/6</b></span>
+                      </div>
+                      <p class="mm-note warn">Clamped by declaration, not by the check. Lifting the declaration gives this model its measured verdict.</p>
+                      <div class="mm-zone-actions"><button class="btn btn-ghost">Quick check</button><button class="btn btn-ghost">Deep check</button></div>
+                    </div>
+                    <div class="mm-danger"><button class="btn btn-ghost">Pull updates</button><button class="btn btn-danger">Delete</button></div>
+                  </div>
+                </li>
+                <li class="mm-row">
+                  <div class="mm-head">
+                    <button class="mm-summary" aria-expanded="false">
+                      <span class="mm-name"><code class="mm-tag">qwen3:4b</code></span>
+                      <span class="mm-state ok"><span class="sr">Weights: </span>Installed</span>
+                      <span class="mm-state warn"><span class="sr">Tool check: </span>Checked on CPU</span>
+                      <span class="mm-chevron"><svg class="i"><use href="#i-chev"/></svg></span>
+                    </button>
+                    <span class="mm-action"></span>
+                  </div>
+                </li>
+                <li class="mm-row">
+                  <div class="mm-head">
+                    <button class="mm-summary" aria-expanded="false">
+                      <span class="mm-name"><code class="mm-tag">qwen3-vl:2b</code><span class="badge cap">Vision</span></span>
+                      <span class="mm-state ok"><span class="sr">Weights: </span>Installed</span>
+                      <span class="mm-state"><span class="sr">Tool check: </span>Not checked</span>
+                      <span class="mm-chevron"><svg class="i"><use href="#i-chev"/></svg></span>
+                    </button>
+                    <span class="mm-action"></span>
+                  </div>
+                </li>
+                <li class="mm-row">
+                  <div class="mm-head">
+                    <button class="mm-summary" aria-expanded="false">
+                      <span class="mm-name"><code class="mm-tag">qwen3:8b</code></span>
+                      <span class="mm-state"><span class="sr">Weights: </span>Not installed</span>
+                      <span class="mm-state"><span class="sr">Tool check: </span>Not checked</span>
+                      <span class="mm-chevron"><svg class="i"><use href="#i-chev"/></svg></span>
+                    </button>
+                    <span class="mm-action" id="row-8b">
+                      <button class="btn btn-primary" data-when="resting">Pull</button>
+                      <button class="mm-pullmini" data-when="downloading" aria-label="Downloading qwen3:8b - show the progress panel" hidden>
+                        <span id="mini-pct">42%</span><span class="mm-minibar" aria-hidden="true"><i id="mini-bar" style="width: 42.6%"></i></span></button>
+                      <button class="btn btn-primary" data-when="paused" hidden>Resume</button>
+                      <button class="mm-pullmini" data-when="checking" aria-label="Checking qwen3:8b - show the progress panel" hidden>
+                        <span id="mini-n">7/26</span><span class="mm-minibar" aria-hidden="true"><i id="mini-check" style="width: 27%"></i></span></button>
+                    </span>
+                  </div>
+                </li>
+              </ul>
+            </section>
+
+            <section class="mm-section">
+              <h2 class="mm-section-title">Embedding models</h2>
+              <p class="mm-section-note">The active embedder is bound to the vector store: every stored passage was embedded with it, so it cannot
+                be updated or deleted here. Changing it is a re-index.</p>
+              <ul class="mm-list">
+                <li class="mm-row">
+                  <div class="mm-head">
+                    <button class="mm-summary" aria-expanded="false">
+                      <span class="mm-name"><code class="mm-tag">nomic-embed-text</code><span class="badge cap">Active</span></span>
+                      <span class="mm-state ok"><span class="sr">Weights: </span>Installed</span>
+                      <span class="mm-state-space" aria-hidden="true"></span>
+                      <span class="mm-chevron"><svg class="i"><use href="#i-chev"/></svg></span>
+                    </button>
+                    <span class="mm-action"></span>
+                  </div>
+                </li>
+                <li class="mm-row">
+                  <div class="mm-head">
+                    <button class="mm-summary" aria-expanded="true">
+                      <span class="mm-name"><code class="mm-tag">mxbai-embed-large</code></span>
+                      <span class="mm-state ok"><span class="sr">Weights: </span>Installed</span>
+                      <span class="mm-state-space" aria-hidden="true"></span>
+                      <span class="mm-chevron"><svg class="i"><use href="#i-chev"/></svg></span>
+                    </button>
+                    <span class="mm-action"></span>
+                  </div>
+                  <div class="mm-body">
+                    <dl class="mm-facts">
+                      <div class="mm-fact"><dt>Provider</dt><dd>Ollama</dd></div>
+                      <div class="mm-fact"><dt>Family</dt><dd>bert</dd></div>
+                      <div class="mm-fact"><dt>Parameters</dt><dd>335M</dd></div>
+                      <div class="mm-fact"><dt>On disk</dt><dd>0.7 GB</dd></div>
+                    </dl>
+                    <div class="mm-danger"><button class="btn btn-danger" disabled>Delete</button>
+                      <span class="mm-reason">1,204 stored passages were embedded with it. Re-index the knowledge base with the active embedder first.</span></div>
+                  </div>
+                </li>
+              </ul>
+            </section>
+
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div data-part="citation-popover" id="cite-pop" role="dialog" aria-label="Source">
+  <div class="cp-head"><b id="cp-n"></b><span class="cp-title" id="cp-title"></span></div>
+  <div class="cp-file" id="cp-file"></div>
+  <p class="cp-snip" id="cp-snip"></p>
+  <div class="cp-foot"><span id="cp-where"></span><button class="copy-btn">Open source</button></div>
+</div>
+
+<!-- ============ prototype harness (not part of the app design) ============ -->
+<details class="harness" id="harness" open>
+  <summary><span>Prototype harness</span><span aria-hidden="true">+/-</span></summary>
+  <div class="harness-body">
+    <button class="hbtn-play" id="play">Play full turn</button>
+    <h3>View</h3><div class="harness-row" id="view-modes"></div>
+    <h3>Boot</h3><div class="harness-row" id="boot-modes"></div>
+    <h3>Sign in</h3><div class="harness-row" id="login-modes"></div>
+    <h3>Console</h3><div class="harness-row" id="console-modes"></div>
+    <h3>State</h3><div class="harness-row" id="states"></div>
+    <h3>Sky renderer</h3><div class="harness-row" id="sky-modes"></div>
+    <h3>Constellations</h3><div class="harness-row" id="star-modes"></div>
+    <output id="sky-stat">-</output>
+    <h3>Sidebar</h3><div class="harness-row" id="side-modes"></div>
+    <h3>Surfaces</h3><div class="harness-row" id="surface-modes"></div>
+    <h3>Answer type</h3><div class="harness-row" id="prose-modes"></div>
+  </div>
+</details>
+
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement, body = document.body;
+  if (document.startViewTransition && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) root.setAttribute("data-vt", "");
+  window.__proto = {};   /* the harness's hooks for probing from outside */
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  function $(id) { return document.getElementById(id); }
+
+  /* ---------- matrix loaders: 16 dots, a delay table per variant ---------- */
+  var CORNERS = [0, 3, 12, 15], RING = [1, 2, 7, 11, 14, 13, 8, 4], INNER = [5, 6, 9, 10];
+  var TWINKLE = [7, 2, 11, 5, 14, 9, 0, 12, 3, 15, 6, 10, 13, 1, 8, 4], CYCLE = 1200;
+  document.querySelectorAll(".t-matrix").forEach(function (el) {
+    var v = el.getAttribute("data-variant"), rounded = el.getAttribute("data-rounded") === "true";
+    for (var i = 0; i < 16; i++) {
+      var d = document.createElement("i");
+      if (rounded && CORNERS.indexOf(i) >= 0) { d.style.visibility = "hidden"; }
+      else if (v === "scan") { d.style.setProperty("--d", Math.round((i % 4) * (CYCLE / 10))); }
+      else if (v === "twinkle") { d.style.setProperty("--d", Math.round(TWINKLE[i] * (CYCLE / 16))); }
+      else if (v === "orbit") {
+        var k = RING.indexOf(i);
+        if (k >= 0) d.style.setProperty("--d", Math.round(k * (CYCLE / 8))); else d.style.animation = "none";
+      }
+      el.appendChild(d);
+    }
+  });
+
+  /* ---------- the sky ---------- */
+  /* Per state: energy (how much sky), tint (the running step's colour),
+     err (washes toward the danger hue). The renderer eases toward the
+     target, so a state change reads as weather, not as a cut. */
+  var VIOLET = [0.604, 0.541, 0.984], TEAL = [0.271, 0.878, 0.784], MAGENTA = [0.918, 0.498, 0.863];
+  var SKY = {
+    idle:      { e: 0.36, tint: TEAL },
+    boot:      { e: 0.50, tint: TEAL },
+    "boot-model": { e: 0.84, tint: VIOLET },
+    "boot-data":  { e: 0.62, tint: TEAL },
+    "boot-ready": { e: 0.40, tint: TEAL, pulse: 1 },
+    "boot-slow":  { e: 0.30, tint: [0.937, 0.725, 0.392] },
+    login:     { e: 0.44, tint: TEAL },
+    download:  { e: 0.46, tint: [0.937, 0.725, 0.392] },
+    waiting:   { e: 0.48, tint: TEAL },
+    loading:   { e: 0.30, tint: [0.937, 0.725, 0.392] },
+    thinking:  { e: 0.92, tint: VIOLET },
+    tool:      { e: 0.72, tint: TEAL },
+    confirm:   { e: 0.40, tint: MAGENTA },
+    streaming: { e: 0.56, tint: TEAL },
+    error:     { e: 0.30, tint: [0.941, 0.443, 0.541], err: 1 },
+    done:      { e: 0.36, tint: TEAL, pulse: 1 }
+  };
+  var Sky = (function () {
+    var el = document.querySelector(".sky"), canvas = $("sky-gl"), stat = $("sky-stat");
+    /* T is the weather clock. It starts at a moment measured to be lit on
+       both sides of the column across common window shapes, so the first
+       impression is never a lull. */
+    var gl = null, prog = null, U = {}, raf = 0, last = 0, T = 100, frames = 0, statAt = 0;
+    var cur = { e: 0.36, err: 0, pulse: 0, tint: TEAL.slice() };
+    var tgt = { e: 0.36, err: 0, tint: TEAL };
+
+    var FRAG = [
+      "precision mediump float;",
+      "uniform vec2 r; uniform float t; uniform float e; uniform float err; uniform float pulse; uniform vec3 tint;",
+      "float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }",
+      "float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);",
+      "  return mix(mix(hash(i), hash(i+vec2(1.,0.)), f.x), mix(hash(i+vec2(0.,1.)), hash(i+vec2(1.,1.)), f.x), f.y); }",
+      "float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++){ v += a*noise(p); p = p*2.03 + 17.0; a *= 0.5; } return v; }",
+      "void main(){",
+      "  vec2 uv = gl_FragCoord.xy / r; float x = uv.x * r.x / r.y;",
+      "  float warp = fbm(vec2(x*0.7 + t*0.020, t*0.035));",
+      "  float band = fbm(vec2(x*1.25 + warp*1.7, t*0.045 + 3.0));",
+      "  float rays = noise(vec2(x*11.0 + warp*7.0, uv.y*0.55 - t*0.16));",
+      "  float fine = noise(vec2(x*31.0 + warp*9.0, uv.y*1.4 - t*0.3));",
+      "  float lift = -0.05 - 0.45*e;",
+      "  float height = smoothstep(lift, 1.3, uv.y + (band - 0.5)*0.7);",
+      /* a soft floor under the band, so a lull in the weather thins the
+         curtains without emptying the sky; it backs off as energy rises,
+         where the dark gaps between curtains are the point */
+      "  float fl = 0.44 - 0.14*e, dd = band - fl;",
+      "  float curtain = pow(fl + 0.5*(dd + sqrt(dd*dd + 0.004)), 1.7) * (0.5 + 0.38*rays + 0.12*fine) * height;",
+      "  vec3 teal = vec3(0.271, 0.878, 0.784), violet = vec3(0.604, 0.541, 0.984), magenta = vec3(0.918, 0.498, 0.863);",
+      "  vec3 col = mix(teal, violet, smoothstep(0.30, 0.85, uv.y + (band - 0.5)*0.5));",
+      "  col = mix(col, magenta, smoothstep(0.72, 1.1, uv.y + rays*0.25)*0.55);",
+      "  col = mix(col, tint, 0.5);",
+      "  col = mix(col, vec3(0.94, 0.36, 0.46), err*0.8);",
+      "  float a = curtain * (0.7 + 2.3*e + 0.8*pulse);",
+      "  vec3 night = vec3(0.043, 0.051, 0.125);",
+      "  vec3 c = night + col*min(a, 0.92) + tint*0.06*e*(1.0 - uv.y);",
+      "  c += (hash(gl_FragCoord.xy + t) - 0.5) / 255.0;",
+      "  gl_FragColor = vec4(c, 1.0);",
+      "}"].join("\n");
+
+    function initGL() {
+      try { gl = canvas.getContext("webgl", { antialias: false, alpha: false, powerPreference: "low-power" }); } catch (x) { gl = null; }
+      if (!gl) return false;
+      function sh(type, src) { var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; }
+      prog = gl.createProgram();
+      gl.attachShader(prog, sh(gl.VERTEX_SHADER, "attribute vec2 p; void main(){ gl_Position = vec4(p, 0., 1.); }"));
+      gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FRAG));
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { gl = null; return false; }
+      gl.useProgram(prog);
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      var loc = gl.getAttribLocation(prog, "p");
+      gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      ["r", "t", "e", "err", "pulse", "tint"].forEach(function (n) { U[n] = gl.getUniformLocation(prog, n); });
+      resize();
+      return true;
+    }
+    /* Half resolution, capped: the sky is soft by nature, so the upscale is free blur. */
+    function resize() {
+      if (!gl) return;
+      var w = Math.min(960, Math.round(window.innerWidth * 0.5)), h = Math.round(w * window.innerHeight / window.innerWidth);
+      canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h);
+    }
+    function draw() {
+      gl.uniform2f(U.r, canvas.width, canvas.height); gl.uniform1f(U.t, T);
+      gl.uniform1f(U.e, cur.e); gl.uniform1f(U.err, cur.err); gl.uniform1f(U.pulse, cur.pulse);
+      gl.uniform3f(U.tint, cur.tint[0], cur.tint[1], cur.tint[2]);
+      gl.drawArrays(gl.TRIANGLES, 0, 3); frames++;
+    }
+    function settled() { return Math.abs(cur.e - tgt.e) < 0.01 && cur.pulse < 0.02; }
+    /* 30 fps while the weather is changing or the turn is busy; 20 fps at rest. */
+    function loop(now) {
+      raf = requestAnimationFrame(loop);
+      var dt = now - last, cap = (settled() && tgt.e < 0.4) ? 1000 / 20 : 1000 / 30;
+      if (dt < cap - 2) return;
+      last = now; dt = Math.min(dt, 120);
+      var k = 1 - Math.exp(-dt / 520);
+      cur.e += (tgt.e - cur.e) * k; cur.err += ((tgt.err || 0) - cur.err) * k;
+      cur.pulse *= Math.exp(-dt / 700);
+      for (var i = 0; i < 3; i++) cur.tint[i] += (tgt.tint[i] - cur.tint[i]) * k;
+      T += dt / 1000 * (0.75 + 2.4 * cur.e);
+      draw();
+      if (now - statAt > 1000) {
+        stat.textContent = "shader " + canvas.width + "x" + canvas.height + ", " + Math.round(frames * 1000 / (now - statAt)) + " fps";
+        frames = 0; statAt = now;
+      }
+    }
+    function stop() { cancelAnimationFrame(raf); raf = 0; }
+    function start() {
+      stop();
+      var mode = root.getAttribute("data-sky");
+      if (mode === "shader") {
+        if (!gl && !initGL()) { setMode("css"); stat.textContent = "WebGL unavailable: using CSS"; return; }
+        if (reduce.matches) { snap(); draw(); stat.textContent = "shader, still frame (reduced motion)"; return; }
+        last = performance.now(); statAt = last; frames = 0; raf = requestAnimationFrame(loop);
+      } else if (mode === "css") {
+        stat.textContent = "css, 3 layers, transform only"; applyCss();
+      } else { stat.textContent = "off: flat night"; }
+    }
+    function snap() { cur.e = tgt.e; cur.err = tgt.err || 0; cur.tint = tgt.tint.slice(); cur.pulse = 0; }
+    function applyCss() {
+      el.style.setProperty("--sky-e", tgt.e);
+      el.querySelectorAll(".sky-css i").forEach(function (layer) {
+        layer.getAnimations().forEach(function (a) { a.updatePlaybackRate(0.6 + 5 * tgt.e); });
+      });
+    }
+    function rgb(c) { return "rgb(" + Math.round(c[0] * 255) + "," + Math.round(c[1] * 255) + "," + Math.round(c[2] * 255) + ")"; }
+    function setState(s) {
+      var d = SKY[s] || SKY.idle;
+      tgt = { e: d.e, err: d.err || 0, tint: d.tint };
+      if (d.pulse) cur.pulse = 1;
+      root.style.setProperty("--sky-tint", rgb(d.tint));
+      el.style.setProperty("--sky-tint", rgb(d.tint));
+      var mode = root.getAttribute("data-sky");
+      if (mode === "css") applyCss();
+      if (mode === "shader" && gl && reduce.matches) { snap(); draw(); }
+    }
+    function setMode(m) { root.setAttribute("data-sky", m); start(); }
+    window.addEventListener("resize", function () { resize(); if (gl && reduce.matches) draw(); });
+    document.addEventListener("visibilitychange", function () { if (document.hidden) stop(); else start(); });
+    reduce.addEventListener("change", start);
+    /* what the sky shows this frame: eased while the shader runs, else the target */
+    function current() { return (gl && raf) ? cur : { e: tgt.e, err: tgt.err || 0, pulse: 0, tint: tgt.tint }; }
+    return { setState: setState, setMode: setMode, start: start, current: current };
+  })();
+
+  /* ---------- the live turn ---------- */
+  var STATES = ["idle", "waiting", "loading", "thinking", "tool", "confirm", "streaming", "error", "done"];
+  var stateParts = {
+    idle: [], waiting: ["waiting"], loading: ["waiting"],
+    thinking: ["thinking"], tool: ["thinking", "tool"], confirm: ["thinking", "tool", "confirm"],
+    streaming: ["thinking", "tool", "content"], error: ["thinking", "tool", "error"],
+    done: ["thinking", "tool", "content", "done"]
+  };
+  var live = document.querySelector(".live"), liveText = $("live-text"), thread = $("thread");
+  var FINAL = "Posted. The status page now shows \"Scheduled maintenance - vector store migration, Saturday " +
+    "22:00-23:30 UTC\". I followed the phrasing of previous announcements and kept the rollback note in the " +
+    "internal copy only.";
+  var typing = null, timers = [];
+
+  /* Following, as the app already does it: "stuck" is simply "within 80px
+     of the end", re-measured on every scroll. It is a distance, not a
+     direction, so a layout change that moves the scroll position (a panel
+     collapsing, the docked notice closing) can never be mistaken for the
+     reader scrolling away. Sending, and answering a confirmation, re-stick.
+     A resize observer drives the follow, so anything that changes height -
+     streamed text, an opening panel, the notice - is followed frame by frame. */
+  var jump = $("jump"), stuck = false, gliding = 0;
+  function gap() { return thread.scrollHeight - thread.scrollTop - thread.clientHeight; }
+  function syncJump() {
+    var away = !stuck && !gliding;
+    if (away) jump.setAttribute("data-show", ""); else { jump.removeAttribute("data-show"); jump.removeAttribute("data-new"); }
+    jump.tabIndex = away ? 0 : -1;
+  }
+  var seenHeight = 0, chase = 0, intentUntil = 0;
+  function selfScroll(top) { thread.scrollTop = top; }
+  /* following eases toward the end over a few frames, so streamed lines
+     land without a snap; it keeps chasing while the content keeps growing */
+  function chaseEnd() {
+    if (reduce.matches) { thread.scrollTop = thread.scrollHeight; return; }
+    if (chase) return;
+    function step() {
+      var target = thread.scrollHeight - thread.clientHeight, d = target - thread.scrollTop;
+      if (!stuck || gliding || performance.now() < intentUntil) { chase = 0; return; }
+      if (Math.abs(d) < .6) { chase = 0; selfScroll(target); return; }
+      selfScroll(thread.scrollTop + d * .3); chase = requestAnimationFrame(step);
+    }
+    chase = requestAnimationFrame(step);
+  }
+  function follow() {
+    var grew = seenHeight && thread.scrollHeight > seenHeight + 4; seenHeight = thread.scrollHeight;
+    if (gliding) return;
+    if (stuck) chaseEnd();
+    else if (grew && body.dataset.state !== "idle" && gap() > 80) jump.setAttribute("data-new", "");   // a live turn added content while away
+  }
+  /* A glide that runs its course was asked to reach the end, so it ends
+     stuck even if the content grew past its target on the way. Only the
+     reader taking over (below) re-measures. */
+  function endGlide() { if (!gliding) return; clearTimeout(gliding); gliding = 0; stuck = true; follow(); syncJump(); }
+  function pin(smooth) {
+    stuck = true;
+    if (smooth && !reduce.matches && gap() > 80) {
+      var from = thread.scrollTop, dur = Math.min(1100, 420 + gap() * .35), t0 = performance.now();
+      clearTimeout(gliding); gliding = setTimeout(endGlide, dur + 120);
+      (function step(now) {
+        if (!gliding) return;
+        var p = Math.min(1, (now - t0) / dur), e = p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+        selfScroll(from + (thread.scrollHeight - thread.clientHeight - from) * e);
+        if (p < 1) requestAnimationFrame(step); else endGlide();
+      })(t0);
+    } else { selfScroll(thread.scrollHeight); }
+    syncJump();
+  }
+  thread.addEventListener("scroll", function () {
+    if (gliding) { if (gap() < 2) endGlide(); return; }
+    /* Only a scroll the reader made (a wheel, touch, pointer or key signal
+       just before it) is measured. Every other scroll event is the page
+       moving itself - scroll anchoring when a card appears while a panel
+       above it collapses, a layout shift, its own chase - and is followed. */
+    if (performance.now() < intentUntil) { stuck = gap() < 80; syncJump(); return; }
+    if (thread.scrollHeight !== seenHeight) follow();   /* a layout move: keep following if stuck, else just note the growth */
+    syncJump();
+  });
+  thread.addEventListener("scrollend", function () { if (gliding) endGlide(); });
+  /* the reader taking over cancels a glide; a wheel notch upward or a
+     paging key is intent to leave the end, whatever the distance */
+  function takeOver(leave, hold) {
+    intentUntil = performance.now() + hold;
+    if (gliding) { clearTimeout(gliding); gliding = 0; }
+    stuck = leave ? false : gap() < 80; syncJump();
+  }
+  thread.addEventListener("wheel", function (e) { takeOver(e.deltaY < 0, 400); }, { passive: true });
+  thread.addEventListener("keydown", function (e) { takeOver(["ArrowUp", "PageUp", "Home"].indexOf(e.key) >= 0, 400); });
+  /* a touch fling keeps scrolling after the finger lifts; a scrollbar drag lasts until the pointer lifts */
+  thread.addEventListener("touchstart", function () { takeOver(false, 2500); }, { passive: true });
+  thread.addEventListener("touchmove", function () { intentUntil = performance.now() + 2500; }, { passive: true });
+  thread.addEventListener("pointerdown", function () { takeOver(false, 1500); }, { passive: true });
+  thread.addEventListener("pointermove", function (e) { if (e.buttons) intentUntil = performance.now() + 1500; }, { passive: true });
+  if (window.ResizeObserver) {
+    var ro = new ResizeObserver(follow);
+    ro.observe(thread); ro.observe(thread.firstElementChild);
+  }
+  jump.addEventListener("click", function () { pin(true); Stars.warp(); });
+  function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+  function clearTimers() { timers.forEach(clearTimeout); timers = []; if (typing) { clearInterval(typing); typing = null; } }
+  function modelName() { return $("model-name").textContent; }
+
+  /* ---------- composer toggles ---------- */
+  var thinkChip = $("think-chip"), webChip = $("web-chip");
+  function modelDoesBoth() { return $("model-select").querySelector('.model-opt[aria-current="true"]').hasAttribute("data-both"); }
+  function syncToggles() {
+    var think = thinkChip.getAttribute("aria-pressed") === "true", web = webChip.getAttribute("aria-pressed") === "true";
+    var held = think && web && !modelDoesBoth();
+    thinkChip.querySelector(".lbl").textContent = "Thinking: " + (think ? "On" : "Auto");
+    thinkChip.title = think
+      ? "Always reason before answering. On models that cannot do both at once, this turn will not use tools."
+      : "Reason first only when the question calls for it.";
+    if (held) webChip.setAttribute("data-held", ""); else webChip.removeAttribute("data-held");
+    webChip.title = held ? "Not this turn: " + modelName() + " cannot reason and search at once. Set thinking to Auto to search."
+      : web ? "Look things up online when a question needs current information."
+      : "Answer from local knowledge only - nothing is fetched.";
+    $("reach-web").textContent = held ? "stands down while thinking" : web ? "on" : "off";
+  }
+  [thinkChip, webChip].forEach(function (c) {
+    c.addEventListener("click", function () { c.setAttribute("aria-pressed", c.getAttribute("aria-pressed") === "true" ? "false" : "true"); syncToggles(); });
+  });
+
+  function notice(title, sub) {
+    var cn = $("cn");
+    if (!title) { cn.removeAttribute("data-open"); return; }
+    $("cn-title").textContent = title; $("cn-sub").textContent = sub; cn.setAttribute("data-open", "");
+  }
+  function modelState(s) {
+    $("model-status").setAttribute("data-model-state", s);
+    $("ms-state").textContent = s === "memory" ? "in memory" : s === "loading" ? "loading" : "on disk";
+  }
+
+  function setState(s) {
+    body.dataset.state = s;
+    var busy = ["waiting", "loading", "thinking", "tool", "streaming"].indexOf(s) >= 0;
+    if (busy) body.setAttribute("data-busy", ""); else body.removeAttribute("data-busy");
+    $("send").setAttribute("aria-label", busy ? "Stop" : "Send");
+    var show = stateParts[s] || [];
+    live.querySelectorAll("[data-live]").forEach(function (el) {
+      el.style.display = show.indexOf(el.dataset.live) >= 0 ? "" : "none";
+    });
+    // waiting row: reaching the model vs waiting for it to load
+    $("wait-a").textContent = "Sending to " + modelName();
+    $("wait-b").textContent = "Waiting for " + modelName() + " to load";
+    $("wait-a").hidden = (s === "loading"); $("wait-b").hidden = (s !== "loading");
+    if (s === "loading") {
+      modelState("loading");
+      notice(modelName() + " is still loading", "Your message is queued and will run on its own. No need to resend.");
+    } else if (s !== "waiting") { if ($("ms-state").textContent === "loading") modelState("memory"); notice(null); }
+    // thinking row: open with a loader while live, a collapsed summary after
+    var thinkingNow = (s === "thinking");
+    $("g-think").style.display = thinkingNow ? "none" : ""; $("l-think").style.display = thinkingNow ? "" : "none";
+    $("think-label").textContent = thinkingNow ? "Thinking" : "Thought for 3 seconds";
+    $("think-btn").setAttribute("aria-expanded", (thinkingNow || s === "tool") ? "true" : "false");
+    // tool row: running vs finished vs failed
+    var running = (s === "tool");
+    $("g-tool").style.display = running ? "none" : ""; $("l-tool").style.display = running ? "" : "none";
+    $("tool-label").textContent = running ? "Searching the knowledge base" : "Searched the knowledge base";
+    $("tool-meta").textContent = running ? "" : "1 source";
+    // streaming text
+    if (typing) { clearInterval(typing); typing = null; }
+    if (s === "streaming") {
+      liveText.textContent = "";
+      var words = FINAL.split(" "), i = 0, caret = document.createElement("span");
+      caret.className = "caret"; liveText.appendChild(caret);
+      typing = setInterval(function () {
+        if (i < words.length) {
+          var w = document.createElement("span"); w.className = "tok"; w.textContent = (i ? " " : "") + words[i++];
+          liveText.insertBefore(w, caret); follow();
+        } else { clearInterval(typing); typing = null; setState("done"); }
+      }, 55);
+    } else if (s === "done") {
+      liveText.innerHTML = FINAL.replace("announcements", 'announcements<span class="cite-mark" tabindex="0" role="button">1</span>');
+    } else if (s === "idle") { liveText.textContent = ""; }
+    document.querySelectorAll("#states .hbtn").forEach(function (b) {
+      b.setAttribute("aria-pressed", b.textContent === s ? "true" : "false");
+    });
+    Sky.setState(s);
+    if (s !== "idle") requestAnimationFrame(follow);
+  }
+
+  function group(id, names, pressed, fn) {
+    var row = $(id);
+    names.forEach(function (n) {
+      var b = document.createElement("button"); b.className = "hbtn"; b.textContent = n;
+      b.setAttribute("aria-pressed", n === pressed ? "true" : "false");
+      b.addEventListener("click", function () {
+        if (id !== "states") row.querySelectorAll(".hbtn").forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
+        fn(n);
+      });
+      row.appendChild(b);
+    });
+  }
+  group("states", STATES, "idle", function (s) { clearTimers(); if (s !== "idle") pin(true); setState(s); });
+  group("sky-modes", ["shader", "css", "off"], "shader", function (m) { Sky.setMode(m); Sky.setState(body.dataset.state); });
+  group("star-modes", ["boot", "everywhere", "off"], "everywhere", function (m) { root.setAttribute("data-stars", m === "everywhere" ? "all" : m); Stars.sync(); });
+  group("side-modes", ["glass", "frost", "shade"], "shade", function (m) { root.setAttribute("data-side", m); });
+  group("prose-modes", ["serif", "sans"], "serif", function (m) { root.setAttribute("data-prose", m); });
+  group("surface-modes", ["solid", "glass"], "glass", function (m) { root.setAttribute("data-surface", m); });
+
+  /* where the composer sits inside the main pane, for the veil's window.
+     Measured from the bottom edge, so nothing opening above it moves it. */
+  var measurePane = (function () {
+    var pane = document.querySelector(".main"), box = document.querySelector(".composer-box");
+    function measure() {
+      var m = pane.getBoundingClientRect(), b = box.getBoundingClientRect();
+      pane.style.setProperty("--pane-x", (b.left - m.left) + "px");
+      pane.style.setProperty("--pane-b", (m.bottom - b.bottom) + "px");
+      pane.style.setProperty("--pane-w", b.width + "px");
+      pane.style.setProperty("--pane-h", b.height + "px");
+    }
+    if (window.ResizeObserver) { var po = new ResizeObserver(measure); po.observe(pane); po.observe(box); }
+    measure();
+    return measure;
+  })();
+
+  /* ---------- views: an open thread, or a new chat ---------- */
+  var titleEl = document.querySelector(".title"), THREAD_TITLE = titleEl.textContent;
+  var currentRow = document.querySelector('.convo[aria-current="true"]');
+  (function () {
+    var turns = thread.querySelectorAll(".thread-inner > .turn");
+    for (var i = 0; i < turns.length - 2; i++) turns[i].classList.add("turn-old");
+  })();
+  function applyView(v, fresh) {
+    body.setAttribute("data-view", v);
+    if (fresh) body.setAttribute("data-fresh", ""); else body.removeAttribute("data-fresh");
+    var open = v === "thread" && !fresh;
+    titleEl.textContent = open ? THREAD_TITLE : "New chat";
+    if (open) currentRow.setAttribute("aria-current", "true"); else currentRow.removeAttribute("aria-current");
+    document.querySelectorAll("#view-modes .hbtn").forEach(function (b) {
+      b.setAttribute("aria-pressed", VIEW_OF[b.textContent] === v ? "true" : "false"); });
+    thread.scrollTop = 0; stuck = false; syncJump(); measurePane();
+    if (v === "boot") Sky.setState("boot"); else bootClear();
+    if (v === "login") Sky.setState("login");
+    applyConsole(v === "console" ? consoleMode : null);
+    Stars.sync();
+  }
+  var VIEW_OF = { "sign in": "login", "boot": "boot", "thread": "thread", "new chat": "new", "console": "console" };
+  /* then: what to start once the new view is in place (the first turn) */
+  function setView(v, fresh, then) {
+    clearTimers(); setState("idle");
+    function run() { applyView(v, fresh); if (then) then(); }
+    if (document.startViewTransition && !reduce.matches) {
+      var from = body.getAttribute("data-view"), booting = v === "boot" || from === "boot";
+      var consoling = v === "console" || from === "console";
+      var movers = booting
+        ? [document.querySelector(".boot-mark"), $("brand-mark"), $("boot-head"), document.querySelector(".welcome-head"), document.querySelector(".login-mark")]
+        : consoling
+          ? Array.prototype.slice.call(document.querySelectorAll('[data-part="topbar"], [data-part="sidebar"], [data-part="console-rail"]'))
+          : [document.querySelector(".composer-box")];
+      movers.forEach(function (m) { m.classList.add("travels"); });
+      var nodes = booting ? Array.prototype.slice.call(document.querySelectorAll("#boot-rail .boot-node, .reach > li")) : [];
+      nodes.forEach(function (n, i) { n.style.viewTransitionName = "node-" + (i % 3 + 1); });
+      if (from === "boot" && v === "new") Stars.handoff();
+      document.startViewTransition(run).finished.finally(function () {
+        movers.forEach(function (m) { m.classList.remove("travels"); });
+        nodes.forEach(function (n) { n.style.viewTransitionName = ""; });
+      });
+    } else run();
+  }
+  group("view-modes", ["sign in", "boot", "thread", "new chat", "console"], "thread", function (m) {
+    if (m === "boot") setView("boot", false, function () { runBoot(bootStall); }); else setView(VIEW_OF[m], false);
+  });
+
+  /* ---------- constellations ---------- */
+  /* A 2D canvas, ~30 fps, above the shader. Stars live a while and are
+     replaced elsewhere - sides and corners first, the centre nearly clear.
+     Every so often a spark leaves one star and traces a line through a few
+     neighbours, which brighten; the line rests, then the spark's tail
+     catches up and the line leaves through its last star. Now and then a
+     shooting star crosses the upper half. Colour, brightness and pace
+     follow the sky: lines take its tint, a busy sky (thinking) traces more
+     often, a sky waiting on the person (confirm) rests, an error dims, and
+     a finished turn's pulse lights every star for a moment. The field
+     drifts a little with the thread (parallax), and the jump to the end
+     streaks it outward for a moment. The boot screen, with the whole
+     window to itself, adds a chart of rings turning against each other
+     and a little more activity. */
+  var Stars = (function () {
+    var c = $("sky-stars"), ctx = c.getContext("2d"), bc = $("boot-chart"), bctx = bc.getContext("2d");
+    var W = 0, H = 0, raf = 0, last = 0, t0 = 0, nextAt = 0, cometAt = 0, mainEl = document.querySelector(".main"),
+        consoleMain = document.querySelector(".console-main");
+    var stars = [], lines = [], comets = [], WHITE = "214,222,255", GREY = "214,222,255", VIOLET = "154,138,251", AMBER = "239,185,100";
+    /* the field spans the visible pane (not the window: the sidebar would
+       hide a side), is a little taller than it so parallax never shows an
+       edge, and is seeded half and half so neither side runs thin */
+    var px0 = 0, pw = 0, oy = 0, oyT = 0, vy = 0, vs = 0, warpAt = -1e9, TALL = 1.25;
+    function rgb(t) { return Math.round(t[0] * 255) + "," + Math.round(t[1] * 255) + "," + Math.round(t[2] * 255); }
+    function X(st) { return px0 + st.x * pw; }
+    /* the band wraps and is centred on the window: a star carried past one edge comes back in at
+       the other, so the stars keep answering the thread however far it has scrolled */
+    function Y(st) { var span = H * TALL, v = (st.y * H + oy * st.z) % span; if (v < 0) v += span; return v - H * (TALL - 1) / 2; }
+    function thinSide() { var l = 0; stars.forEach(function (st) { if (st.x < .5) l++; }); return l * 2 > stars.length ? 1 : -1; }
+    /* a place for a star on the given side, weighted to the edge and corners */
+    function place(st, now, side) {
+      var x, y, edge;
+      /* weighted by the horizontal distance from the centre (a touch more at the corners), so the
+         centre column never lights: the band wraps, so any row is in time drawn anywhere */
+      do { x = (side < 0 ? 0 : .5) + Math.random() * .5; y = Math.random() * TALL; edge = Math.abs(x - .5) * 2 * (.75 + .5 * Math.abs(y / TALL - .5)); }
+      while (Math.random() > Math.pow(edge, 2));
+      st.x = x; st.y = y; st.r = .6 + Math.random() * 1.5; st.ph = Math.random() * 6.283; st.sp = .5 + Math.random() * 1.3;
+      st.lit = 0; st.born = now; st.life = 9000 + Math.random() * 26000; st.hold = 0;
+      st.z = .45 + Math.random() * .9;   /* depth: the near field moves and trails more */
+      st.tint = Math.random() < .3 ? "sky" : WHITE;
+      return st;
+    }
+    function seed(now) {
+      stars = []; lines = []; comets = [];
+      var n = Math.round(W * H * TALL / 8500);
+      for (var i = 0; i < n; i++) { var st = place({}, now, i % 2 ? 1 : -1); st.born = now - Math.random() * st.life; stars.push(st); }
+    }
+    /* a star fades in, lives (longer if a line is using it), fades out */
+    function ends(st) { return Math.max(st.life, st.hold - st.born); }
+    function envelope(st, now) {
+      var age = now - st.born, end = ends(st);
+      if (age < 1500) return age / 1500;
+      if (age > end) return Math.max(0, 1 - (age - end) / 2500);
+      return 1;
+    }
+    function size() {
+      var dpr = Math.min(2, window.devicePixelRatio || 1);
+      W = c.clientWidth; H = c.clientHeight; c.width = W * dpr; c.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      bc.width = W * dpr; bc.height = H * dpr; bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      pane(); seed(performance.now());
+    }
+    function pane() {
+      var v = body.getAttribute("data-view"), whole = v === "boot" || v === "login";
+      var r = whole ? null : (v === "console" ? consoleMain : mainEl).getBoundingClientRect();
+      px0 = r ? Math.max(0, r.left) : 0; pw = W - px0;
+    }
+    function spawn(now, sky) {
+      var settled = stars.filter(function (st) { var age = now - st.born; return age > 1500 && age < ends(st) - 600; });
+      if (settled.length < 4) return;
+      /* a few tries at a starting star: one in a sparse spot has no neighbours in reach */
+      var path, want = 3 + Math.floor(Math.random() * 4), tries = 8;
+      do {
+        path = [settled[Math.floor(Math.random() * settled.length)]];
+        while (path.length < want) {
+          var cur = path[path.length - 1], best = null, bd = 1e9;
+          settled.forEach(function (st) {
+            if (path.indexOf(st) >= 0) return;
+            var dx = X(st) - X(cur), dy = Y(st) - Y(cur), d = dx * dx + dy * dy;   /* as drawn: across the wrap, field neighbours are a window apart */
+            if (d < bd) { bd = d; best = st; }
+          });
+          if (!best || Math.sqrt(bd) > Math.min(W, H) * .24) break;
+          path.push(best);
+        }
+      } while (path.length < 3 && --tries);
+      if (path.length < 3) return;
+      var l = { path: path, born: now, draw: 900 + Math.random() * 800, hold: 1600 + Math.random() * 2600, fade: 1100 + Math.random() * 700,
+        alpha: Math.random() < .35 ? .55 + Math.random() * .3 : .2 + Math.random() * .16,
+        tint: Math.random() < .7 ? rgb(sky.tint) : WHITE };
+      path.forEach(function (st) { st.hold = Math.max(st.hold, now + l.draw + l.hold + l.fade + 800); });
+      lines.push(l);
+    }
+    function glowAt(cx, x, y, tint, a, r) {
+      if (a <= 0) return;
+      var g = cx.createRadialGradient(x, y, 0, x, y, r * 4);
+      g.addColorStop(0, "rgba(" + tint + "," + a + ")"); g.addColorStop(.3, "rgba(" + tint + "," + (a * .35) + ")"); g.addColorStop(1, "rgba(" + tint + ",0)");
+      cx.fillStyle = g; cx.beginPath(); cx.arc(x, y, r * 4, 0, 6.283); cx.fill();
+    }
+    function spark(x, y, tint, a, r) { glowAt(ctx, x, y, tint, a, r); }
+    /* a four-point star, as charts draw them */
+    function sparkle(cx, x, y, r, tint, a) {
+      glowAt(cx, x, y, tint, a * .5, r * .45);
+      cx.fillStyle = "rgba(" + tint + "," + a + ")"; cx.beginPath(); cx.moveTo(x, y - r);
+      cx.quadraticCurveTo(x, y, x + r, y); cx.quadraticCurveTo(x, y, x, y + r);
+      cx.quadraticCurveTo(x, y, x - r, y); cx.quadraticCurveTo(x, y, x, y - r); cx.fill();
+    }
+    /* the part of a line between two fractions of its length, and the point at one */
+    function walk(l) {
+      var pts = l.path, segs = [], total = 0;
+      for (var i = 1; i < pts.length; i++) { var d = Math.hypot(X(pts[i]) - X(pts[i - 1]), Y(pts[i]) - Y(pts[i - 1])); segs.push(d); total += d; }
+      return { pts: pts, segs: segs, total: total };
+    }
+    function pointAt(w, f) {
+      var left = f * w.total;
+      for (var i = 0; i < w.segs.length; i++) {
+        if (left <= w.segs[i] || i === w.segs.length - 1) {
+          var k = Math.min(1, left / w.segs[i]), a = w.pts[i], b = w.pts[i + 1];
+          return { x: X(a) + (X(b) - X(a)) * k, y: Y(a) + (Y(b) - Y(a)) * k };
+        }
+        left -= w.segs[i];
+      }
+      return { x: X(w.pts[0]), y: Y(w.pts[0]) };
+    }
+    function strokeLine(l, w, from, to, fade) {
+      var a = from * w.total, b = to * w.total, acc = 0, started = false, seam = Math.min(W, H) * .5;
+      ctx.beginPath();
+      for (var i = 0; i < w.segs.length; i++) {
+        var s0 = acc, s1 = acc + w.segs[i]; acc = s1;
+        if (s1 < a || s0 > b) continue;
+        if (w.segs[i] > seam) { started = false; continue; }   /* a leg across the band's wrap would cross the window */
+        var p = w.pts[i], q = w.pts[i + 1], ax = X(p), ay = Y(p), bx = X(q), by = Y(q);
+        var ka = Math.max(0, (a - s0) / w.segs[i]), kb = Math.min(1, (b - s0) / w.segs[i]);
+        if (!started) { ctx.moveTo(ax + (bx - ax) * ka, ay + (by - ay) * ka); started = true; }
+        ctx.lineTo(ax + (bx - ax) * kb, ay + (by - ay) * kb);
+        if (ka <= 0) p.lit = Math.max(p.lit, fade * l.alpha);
+        if (kb >= 1) q.lit = Math.max(q.lit, fade * l.alpha);
+      }
+      ctx.lineWidth = 2.6; ctx.strokeStyle = "rgba(" + l.tint + "," + (l.alpha * fade * .16) + ")"; ctx.stroke();
+      ctx.lineWidth = 1; ctx.strokeStyle = "rgba(" + l.tint + "," + (l.alpha * fade) + ")"; ctx.stroke();
+    }
+    function ease(p) { return 1 - Math.pow(1 - p, 3); }
+    function drawLine(l, now) {
+      var age = now - l.born, w = walk(l), head, glow = Math.min(1, l.alpha + .4);
+      if (age > l.draw + l.hold + l.fade) return false;
+      /* a fast scroll can carry one of its stars across the band's wrap; the leg across is left out
+         (strokeLine) and the rest of the line fades away */
+      if (l.cut === undefined && w.segs.some(function (s) { return s > Math.min(W, H) * .5; })) l.cut = now;
+      var cut = l.cut === undefined ? 1 : Math.max(0, 1 - (now - l.cut) / 350);
+      if (cut <= 0) return false;
+      if (age < l.draw) {                       /* the spark traces the line in, and dims as it arrives */
+        var p = age / l.draw, to = ease(p); strokeLine(l, w, 0, to, cut);
+        head = pointAt(w, to); spark(head.x, head.y, l.tint, glow * cut * Math.min(1, p * 4) * Math.min(1, (1 - p) * 3), 1.8);
+      } else if (age < l.draw + l.hold) {       /* it rests */
+        strokeLine(l, w, 0, 1, cut);
+      } else {                                  /* the tail catches up; the line leaves through its last star, which flares */
+        var f = (age - l.draw - l.hold) / l.fade, from = ease(f), fade = (1 - from * .5) * cut;
+        strokeLine(l, w, from, 1, fade);
+        head = pointAt(w, from); spark(head.x, head.y, l.tint, (glow - .1) * cut * Math.min(1, f * 4) * (1 - from), 1.4);
+        var lastStar = l.path[l.path.length - 1]; lastStar.lit = Math.max(lastStar.lit, from * from * .9);
+      }
+      return true;
+    }
+    /* shooting stars: a streak from the upper part of the sky, a clear diagonal, gone in about a second */
+    function comet(now, sky) {
+      var x, ang = Math.PI / 2 + (Math.random() < .5 ? -1 : 1) * (.5 + Math.random() * .55);
+      do { x = Math.random(); } while (Math.random() > Math.pow(Math.abs(x - .5) * 2, 1.5));
+      comets.push({ x: x * W, y: (.03 + Math.random() * .58) * H, dx: Math.cos(ang), dy: Math.sin(ang), born: now, dur: 950 + Math.random() * 600,
+        dist: Math.min(W, H) * (.2 + Math.random() * .16), len: 90 + Math.random() * 70, tint: Math.random() < .5 ? rgb(sky.tint) : WHITE });
+    }
+    function drawComet(k, now) {
+      var p = (now - k.born) / k.dur; if (p > 1) return false;
+      var hx = k.x + k.dx * k.dist * p, hy = k.y + oy + k.dy * k.dist * p;
+      var a = Math.pow(Math.sin(Math.PI * p), 1.4) * .9, tl = k.len * Math.min(1, p / .3, (1 - p) / .35);
+      var g = ctx.createLinearGradient(hx, hy, hx - k.dx * tl, hy - k.dy * tl);
+      g.addColorStop(0, "rgba(" + k.tint + "," + a + ")"); g.addColorStop(1, "rgba(" + k.tint + ",0)");
+      ctx.strokeStyle = g; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx - k.dx * tl, hy - k.dy * tl); ctx.stroke();
+      spark(hx, hy, k.tint, a, 1.3);
+      return true;
+    }
+    /* the boot chart, drawn on its own canvas above the shade pool: a
+       graduated instrument ring, three tilted orbits each carrying a
+       glowing comet-tail arc in its own colour, sparkles on the ring, all
+       breathing slowly and turning against each other */
+    var ORBITS = [
+      { r: 1.1, tilt: .42, rot: -.35, speed: .36, span: 2.6, color: "sky" },
+      { r: 1.3, tilt: .3, rot: .55, speed: -.22, span: 2.3, color: VIOLET },
+      { r: .96, tilt: .62, rot: 1.3, speed: .5, span: 1.9, color: AMBER }
+    ];
+    function ring(cx, r, a, w) { cx.lineWidth = w || 1; cx.strokeStyle = a; cx.beginPath(); cx.arc(0, 0, r, 0, 6.283); cx.stroke(); }
+    function ticks(cx, r, n, every, a) {
+      cx.lineWidth = 1; cx.strokeStyle = a; cx.beginPath();
+      for (var i = 0; i < n; i++) {
+        var ang = i * 6.283 / n, r0 = r - (i % every ? 4 : 11);
+        cx.moveTo(Math.cos(ang) * r0, Math.sin(ang) * r0); cx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+      }
+      cx.stroke();
+    }
+    function orbit(cx, o, R, t, skyTint) {
+      var color = o.color === "sky" ? skyTint : o.color, r = o.r * R, head = t * o.speed, N = 48;
+      cx.save(); cx.rotate(o.rot); cx.scale(1, o.tilt);
+      ring(cx, r, "rgba(" + color + ",.16)", 1);
+      var back = o.speed < 0 ? -1 : 1;        /* the tail lies behind the head, whichever way it travels */
+      cx.lineWidth = 9; cx.strokeStyle = "rgba(" + color + ",.10)"; cx.beginPath(); cx.arc(0, 0, r, head - back * o.span * .4, head, back < 0); cx.stroke();
+      for (var i = 0; i < N; i++) {           /* the tail: alpha and width ramp up toward the head */
+        var k = (i + 1) / N, a0 = head - back * o.span * (1 - i / N), a1 = head - back * o.span * (1 - k);
+        cx.lineWidth = .6 + 2.4 * k; cx.strokeStyle = "rgba(" + color + "," + (k * k * .95) + ")";
+        cx.beginPath(); cx.arc(0, 0, r, a0, a1 + back * .015, back < 0); cx.stroke();
+      }
+      cx.restore();
+      var ex = Math.cos(head) * r, ey = Math.sin(head) * r * o.tilt, cs = Math.cos(o.rot), sn = Math.sin(o.rot);
+      var hx = ex * cs - ey * sn, hy = ex * sn + ey * cs;
+      sparkle(cx, hx, hy, 8, color, .95); glowAt(cx, hx, hy, color, .8, 2.2);
+    }
+    function chart(cx, t, sky, mx, my, R, dim) {
+      var tint = rgb(sky.tint), breathe = 1 + .012 * Math.sin(t * .9);
+      cx.save(); cx.globalAlpha = dim; cx.translate(mx, my); cx.scale(breathe, breathe);
+      /* the instrument ring, turning slowly against the clock, with sparkles riding it */
+      cx.save(); cx.rotate(-t * .01);
+      ring(cx, R, "rgba(" + GREY + ",.26)", 1); ring(cx, R, "rgba(" + tint + ",.08)", 6); ring(cx, R - 14, "rgba(" + GREY + ",.12)", 1);
+      ticks(cx, R, 120, 10, "rgba(" + GREY + ",.34)");
+      for (var i = 0; i < 6; i++) {
+        var ang = i * 6.283 / 6 + .4, tw = .45 + .55 * Math.abs(Math.sin(t * 1.6 + i * 1.3));
+        sparkle(cx, Math.cos(ang) * R, Math.sin(ang) * R, 5 + 2 * tw, i % 2 ? GREY : tint, tw);
+      }
+      cx.restore();
+      /* an outer ring broken into eight arcs, turning with the clock, dust beyond it */
+      cx.save(); cx.rotate(t * .016);
+      for (var k = 0; k < 8; k++) { cx.lineWidth = 1; cx.strokeStyle = "rgba(" + GREY + ",.2)"; cx.beginPath(); cx.arc(0, 0, R * 1.2, k * Math.PI / 4, k * Math.PI / 4 + Math.PI / 4 * .72); cx.stroke(); }
+      cx.fillStyle = "rgba(" + GREY + ",.3)";
+      for (var d = 0; d < 48; d++) { var da = d * 6.283 / 48; cx.beginPath(); cx.arc(Math.cos(da) * R * 1.24, Math.sin(da) * R * 1.24, d % 4 ? .8 : 1.4, 0, 6.283); cx.fill(); }
+      cx.restore();
+      /* the orbits */
+      ORBITS.forEach(function (o) { orbit(cx, o, R, t, tint); });
+      cx.restore();
+      /* a feathered cut behind the words: the rings pass there dimly, not over the text */
+      cx.save(); cx.globalCompositeOperation = "destination-out"; cx.translate(mx, my); cx.scale(1, .82);
+      var hole = cx.createRadialGradient(0, 0, 0, 0, 0, R * .92);
+      hole.addColorStop(0, "rgba(0,0,0,.8)"); hole.addColorStop(.62, "rgba(0,0,0,.65)"); hole.addColorStop(1, "rgba(0,0,0,0)");
+      cx.fillStyle = hole; cx.beginPath(); cx.arc(0, 0, R * .92, 0, 6.283); cx.fill(); cx.restore();
+    }
+    var welcomeEl = document.querySelector(".welcome"), composerBox = document.querySelector(".composer-box"), handoffAt = -1e9;
+    function bootChartGeometry() { return { x: W / 2, y: H * .48, R: Math.min(W * .34, H * .46), dim: 1 }; }
+    function newChartGeometry() {
+      var a = welcomeEl.getBoundingClientRect(), b = composerBox.getBoundingClientRect();
+      return { x: px0 + pw / 2, y: (a.top + b.bottom) / 2, R: Math.min(pw * .31, H * .44), dim: .55 };
+    }
+    function handoff() { handoffAt = performance.now(); }
+    function drawStars(now, t, sky) {
+      var bright = (.7 + .5 * sky.e) * (1 - .35 * sky.err);
+      /* the jump: the field is already rushing up with the glide; for a
+         moment each star also leaves a soft trail below it, so the view
+         reads as falling */
+      var wv = Math.sin(Math.PI * Math.min(1, (now - warpAt) / 1100)); if (wv < 0) wv = 0;
+      vs += (Math.abs(vy) - vs) * (Math.abs(vy) > vs ? .22 : .1);          /* speed eased in, eased out slower */
+      var trail = vs * (2.2 + 6 * wv), dir = vy < 0 ? 1 : -1;               /* the trail lies behind the motion */
+      var ts = Math.min(1, Math.max(0, (trail - .6) / 3)); ts = ts * ts * (3 - 2 * ts);   /* strength, smoothstepped */
+      stars.forEach(function (st) {
+        var env = envelope(st, now);
+        if (env <= 0 && now - st.born > 2000) { place(st, now, thinSide()); env = 0; }
+        var tw = .5 + .5 * Math.sin(t * st.sp + st.ph), a = ((.28 + .55 * tw) * bright + sky.pulse * .4 + wv * .3 * ts) * env;
+        var tint = st.tint === "sky" ? rgb(sky.tint) : st.tint, sx = X(st), sy = Y(st);
+        /* the larger stars carry a soft halo, so the field reads as depth and not as grain */
+        if (st.r > 1.6) glowAt(ctx, sx, sy, tint, Math.min(1, a + st.lit) * .3, st.r * .9);
+        if (ts > 0) {
+          var tl = Math.min(34, trail * st.z * st.z * 1.6), ta = Math.min(1, a + st.lit) * ts, ey = sy + dir * tl;
+          var g = ctx.createLinearGradient(sx, sy, sx, ey);
+          g.addColorStop(0, "rgba(" + tint + "," + (ta * .7) + ")"); g.addColorStop(1, "rgba(" + tint + ",0)");
+          ctx.strokeStyle = g; ctx.lineCap = "round";
+          ctx.lineWidth = st.r * 5; ctx.globalAlpha = .28; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, ey); ctx.stroke();   /* bloom */
+          ctx.lineWidth = st.r * 1.5; ctx.globalAlpha = 1; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx, ey); ctx.stroke();  /* core */
+        }
+        ctx.fillStyle = "rgba(" + tint + "," + Math.min(1, a + st.lit) + ")";
+        ctx.beginPath(); ctx.arc(sx, sy, st.r + st.lit * 1.4, 0, 6.283); ctx.fill();
+        st.lit *= .9;
+      });
+    }
+    /* ms until the next constellation: a busy sky traces more, a sky waiting on the person rests */
+    function pace(sky, boot) {
+      var base = body.dataset.state === "confirm" ? 4200 : 2100 - 1400 * sky.e;
+      if (boot) base *= .6;
+      return base + Math.random() * base;
+    }
+    function frame(now) {
+      raf = requestAnimationFrame(frame);
+      /* 30 fps at rest; full rate while something moves fast enough to step: a handoff, a jump, a quick scroll */
+      var fast = now - handoffAt < 1200 || now - warpAt < 1200 || Math.abs(vy) > .4;
+      if (!fast && now - last < 33) return; last = now;
+      var sky = Sky.current(), boot = body.getAttribute("data-view") === "boot", t = (now - t0) / 1000;
+      pane();
+      /* parallax: the field follows the thread at a tenth, eased, so streamed
+         lines never jog it; a fast glide moves it fast and the trails show.
+         Unbounded: the band wraps, so a long conversation's every scroll still moves the sky */
+      oyT = body.getAttribute("data-view") === "thread" ? -thread.scrollTop * .1 : 0;
+      var was = oy; oy += (oyT - oy) * .16; vy = oy - was;
+      ctx.clearRect(0, 0, W, H);
+      if (boot) { bctx.clearRect(0, 0, W, H); chart(bctx, t, sky, W / 2, H * .48, Math.min(W * .34, H * .46), 1); }
+      else if (bc.width) bctx.clearRect(0, 0, W, H);
+      /* the new chat has the same chart, quieter, under its veil: it is drawn first so the cut behind the words spares the stars */
+      /* the sign-in page has the boot's chart, quieter, so the way in to boot keeps it where it is */
+      if (body.getAttribute("data-view") === "login") { var lg = bootChartGeometry(); chart(ctx, t, sky, lg.x, lg.y, lg.R, 1); }
+      if (body.getAttribute("data-view") === "new") {
+        var g = newChartGeometry(), dt = now - handoffAt, dim = g.dim, f;
+        if (dt < 980) {                                /* arriving from boot: fade where it was, a beat of nothing, then fade in where it lives now */
+          if (dt < 260) { f = 1 - dt / 260; f = f * f * (3 - 2 * f); g = bootChartGeometry(); dim = f; }
+          else if (dt < 420) dim = 0;
+          else { f = (dt - 420) / 560; f = f * f * (3 - 2 * f); dim = g.dim * f; }
+        }
+        if (dim > .01) chart(ctx, t, sky, g.x, g.y, g.R, dim);
+      }
+      if (now > nextAt) { spawn(now, sky); nextAt = now + pace(sky, boot); }
+      if (now > cometAt) { comet(now, sky); cometAt = now + (boot ? 2500 + Math.random() * 3500 : 5000 + Math.random() * 8000 - 4000 * sky.e); }
+      lines = lines.filter(function (l) { return drawLine(l, now); });
+      comets = comets.filter(function (k) { return drawComet(k, now); });
+      drawStars(now, t, sky);
+    }
+    function start() {
+      if (raf || !c.offsetParent) return;
+      size(); t0 = performance.now(); nextAt = t0 + 400; cometAt = t0 + 1500;
+      if (reduce.matches) {                                                /* still stars and a still chart, nothing moves */
+        ctx.clearRect(0, 0, W, H); drawStars(t0 + 2000, 0, Sky.current());
+        if (body.getAttribute("data-view") === "boot") chart(bctx, 0, Sky.current(), W / 2, H * .48, Math.min(W * .34, H * .46), 1);
+        return;
+      }
+      raf = requestAnimationFrame(frame);
+    }
+    function stop() { if (raf) cancelAnimationFrame(raf); raf = 0; }
+    function sync() { if (getComputedStyle(c).display === "none") stop(); else start(); }
+    function warp() { if (!reduce.matches && raf) warpAt = performance.now(); }
+    window.addEventListener("resize", function () { if (raf) size(); });
+    document.addEventListener("visibilitychange", function () { if (document.hidden) stop(); else sync(); });
+    function stats() { return { stars: stars.length, lines: lines.length, comets: comets.length }; }
+    return { sync: sync, warp: warp, stats: stats, handoff: handoff };
+  })();
+
+  /* ---------- boot: the waits, in order, then the shell ---------- */
+  /* The prototype skips ahead: the app would let a wait run about 15 s
+     before calling it slow, and keep counting while it waits. */
+  var BOOT = [
+    { head: "Reaching the <em>backend</em>", wait: "waiting for the API", done: "api 0.5.0", sky: "boot" },
+    { head: "Waking the <em>model</em>", wait: "loading qwen3:4b-instruct", done: "qwen3:4b-instruct, 2.5 GB", sky: "boot-model" },
+    { head: "Gathering your <em>conversations</em>", wait: "fetching what you have", done: "4 conversations, 128 documents", sky: "boot-data" }
+  ];
+  var bootRows = document.querySelectorAll("#boot-rail .boot-node"), bootTimers = [], bootTick = 0, bootStall = false;
+  function bootHead(html, sub) {
+    var h = $("boot-head"); h.innerHTML = html; $("boot-sub").textContent = sub || "";
+    h.classList.remove("swap-in"); void h.offsetWidth; h.classList.add("swap-in");
+  }
+  function bootStep(i, phase) {
+    var row = bootRows[i], d = BOOT[i];
+    row.setAttribute("data-step", phase);
+    row.querySelector("small").textContent = phase === "done" ? d.done : phase === "live" ? d.wait : "";
+    if (phase === "live") { bootHead(d.head, d.wait); Sky.setState(d.sky); }
+    var lit = 0; bootRows.forEach(function (r) { if (r.getAttribute("data-step") === "done") lit++; });
+    $("boot-rail").style.setProperty("--lit", Math.min(1, lit / (bootRows.length - 1)));
+  }
+  function bootClear() {
+    bootTimers.forEach(clearTimeout); bootTimers = [];
+    if (bootTick) { clearInterval(bootTick); bootTick = 0; }
+    $("boot-slow").hidden = true; $("boot").setAttribute("aria-busy", "true");
+  }
+  function runBoot(stall) {
+    bootClear();
+    for (var i = 0; i < bootRows.length; i++) bootStep(i, "pending");
+    bootStep(0, "live");
+    bootTimers.push(setTimeout(function () { bootStep(0, "done"); bootStep(1, "live"); }, 900));
+    if (stall) {
+      bootTimers.push(setTimeout(function () {
+        var from = Date.now() - 15000;
+        bootHead("Still waking the <em>model</em>"); $("boot-slow").hidden = false; $("boot").setAttribute("aria-busy", "false");
+        Sky.setState("boot-slow");
+        function tick() { $("boot-sub").textContent = Math.round((Date.now() - from) / 1000) + " s and counting"; }
+        tick(); bootTick = setInterval(tick, 1000);
+      }, 2900));
+      return;
+    }
+    bootTimers.push(setTimeout(function () { bootStep(1, "done"); bootStep(2, "live"); }, 2900));
+    bootTimers.push(setTimeout(function () { bootStep(2, "done"); bootHead("<em>Ready</em>"); Sky.setState("boot-ready"); }, 3900));
+    bootTimers.push(setTimeout(function () { setView("new", false); }, 4700));
+  }
+  $("boot-retry").addEventListener("click", function () { runBoot(false); });
+  group("boot-modes", ["runs through", "stalls"], "runs through", function (m) {
+    bootStall = m === "stalls";
+    if (body.getAttribute("data-view") === "boot") runBoot(bootStall);
+  });
+  document.querySelector(".new-chat").addEventListener("click", function () { setView("new", false); });
+  $("login-btn").addEventListener("click", function () { setView("boot", false, function () { runBoot(bootStall); }); });
+  $("side-settings").addEventListener("click", function () { setView("console", false); });
+  $("console-back").addEventListener("click", function () { setView("thread", false); });
+  group("login-modes", ["fresh", "lapsed"], "fresh", function (m) {
+    if (m === "lapsed") {
+      $("login-head").innerHTML = "Your session <em>ended</em>";
+      $("login-lede").innerHTML = "Sign in again to get back to <b>Vector store cutover checklist</b>. Nothing you sent was lost.";
+    } else {
+      $("login-head").innerHTML = "Sign in to <em>continue</em>";
+      $("login-lede").innerHTML = "Use a workspace account. You will be sent to your identity provider and brought back here.";
+    }
+  });
+
+  /* ---------- console: the one long operation, in its three renderings ---------- */
+  /* A download advances; a check lands one sample at a time. The sky
+     follows: amber while the runtime is busy fetching, teal while the
+     model is being worked, rest otherwise. */
+  var consoleMode = "resting", consoleTimers = [];
+  var CASES = [
+    ["call", 1, "0.9 s"], ["call", 1, "1.1 s"], ["args", 1, "1.4 s"], ["args", 0, "arguments as prose"], ["chain", 1, "2.6 s"],
+    ["refuse", 1, "0.7 s"], ["refuse", 1, "0.8 s"], ["chain", 1, "2.9 s"], ["args", 1, "1.3 s"], ["call", 1, "1.0 s"], ["chain", 0, "stopped after one call"],
+    ["refuse", 1, "0.7 s"]
+  ];
+  var GLOSS = { call: "Call: told to use a tool, the model calls it.", args: "Args: the call carries the arguments the task needs.",
+    chain: "Chain: a second call follows from the first result.", refuse: "Refuse: with no fitting tool, the model answers in prose." };
+  function caseRow(c) {
+    var li = document.createElement("li"); li.className = "mm-case " + (c[1] ? "pass" : "fail");
+    li.innerHTML = '<svg class="i mm-case-glyph"><use href="#i-' + (c[1] ? "check" : "x") + '"/></svg>' +
+      '<span><span class="mm-case-name">' + c[0] + '</span><span class="mm-case-word">' + (c[1] ? "pass" : "fail") + '</span></span>' +
+      '<span class="mm-case-detail">' + c[2] + '</span>';
+    return li;
+  }
+  function applyConsole(mode) {
+    consoleTimers.forEach(clearInterval); consoleTimers = [];
+    ["pull", "paused", "check"].forEach(function (k) { $("act-" + k).hidden = true; });
+    $("row-8b").querySelectorAll("[data-when]").forEach(function (b) { b.hidden = b.getAttribute("data-when") !== (mode || "resting"); });
+    if (mode === null) return;
+    Sky.setState(mode === "downloading" ? "download" : mode === "checking" ? "tool" : "idle");
+    if (mode === "downloading") {
+      $("act-pull").hidden = false;
+      var pct = 42.6;
+      consoleTimers.push(setInterval(function () {
+        pct = Math.min(97, pct + .35);
+        $("pull-bar").style.width = pct + "%"; $("mini-bar").style.width = pct + "%";
+        $("pull-meta").textContent = pct.toFixed(1) + "% - " + (pct / 20).toFixed(1) + " GB of 5.0 GB"; $("mini-pct").textContent = Math.round(pct) + "%";
+      }, 900));
+    } else if (mode === "paused") {
+      $("act-paused").hidden = false;
+    } else if (mode === "checking") {
+      $("act-check").hidden = false;
+      var list = $("check-cases"), n = 0, seen = {};
+      list.innerHTML = "";
+      function land() {
+        if (n >= CASES.length) return;
+        var c = CASES[n++];
+        if (!seen[c[0]]) { seen[c[0]] = 1; var g = document.createElement("li"); g.className = "mm-case-gloss"; g.setAttribute("role", "presentation"); g.textContent = GLOSS[c[0]]; list.appendChild(g); }
+        list.appendChild(caseRow(c));
+        var done = n + 6, pct = done / 26 * 100;
+        $("check-bar").style.width = pct + "%"; $("mini-check").style.width = pct + "%";
+        $("check-meta").textContent = done + "/26 samples"; $("mini-n").textContent = done + "/26";
+      }
+      land(); consoleTimers.push(setInterval(land, 1700));
+    }
+    document.querySelectorAll("#console-modes .hbtn").forEach(function (b) { b.setAttribute("aria-pressed", b.textContent === mode ? "true" : "false"); });
+  }
+  group("console-modes", ["resting", "downloading", "paused", "checking"], "resting", function (m) {
+    consoleMode = m;
+    if (body.getAttribute("data-view") === "console") applyConsole(m);
+  });
+  document.querySelectorAll(".mm-summary").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var open = b.getAttribute("aria-expanded") !== "true", body = b.closest(".mm-row").querySelector(".mm-body");
+      b.setAttribute("aria-expanded", open ? "true" : "false");
+      if (body) body.hidden = !open;
+    });
+  });
+  currentRow.addEventListener("click", function () { setView("thread", false); });
+
+  function play() {
+    clearTimers(); pin(true); setState("waiting");
+    later(function () { setState("loading"); }, 900);
+    later(function () { setState("thinking"); }, 3900);
+    later(function () { setState("tool"); }, 6900);
+    later(function () { setState("confirm"); }, 9100);
+  }
+  $("play").addEventListener("click", play);
+  $("send").addEventListener("click", function () {
+    if (body.hasAttribute("data-busy")) { clearTimers(); setState("idle"); }
+    else if (body.getAttribute("data-view") === "new") setView("thread", true, play);
+    else play();
+  });
+  $("approve").addEventListener("click", function () { pin(false); setState("streaming"); });
+  $("deny").addEventListener("click", function () {
+    pin(false); setState("done");
+    liveText.textContent = "Understood. Nothing was posted. The draft is above if you want to publish it yourself.";
+    $("live-cites").style.display = "none";
+  });
+
+  /* ---------- small interactions ---------- */
+  document.querySelectorAll("button.disc-btn").forEach(function (b) {
+    b.addEventListener("click", function () { b.setAttribute("aria-expanded", b.getAttribute("aria-expanded") === "true" ? "false" : "true"); });
+  });
+  /* an action taken from a row keeps the row open a moment, long enough
+     to see the state it changed (the copied tick) before it fades */
+  document.querySelectorAll(".turn .act-btn, .turn .copy-btn").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var row = b.closest(".turn"); row.setAttribute("data-hold", "");
+      clearTimeout(row._hold); row._hold = setTimeout(function () { row.removeAttribute("data-hold"); }, 1800);
+    });
+  });
+  document.querySelectorAll(".copy-btn").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var lbl = b.querySelector(".copy-lbl"); b.setAttribute("data-copied", ""); if (lbl) lbl.textContent = "Copied";
+      setTimeout(function () { b.removeAttribute("data-copied"); if (lbl) lbl.textContent = "Copy"; }, 1600);
+    });
+  });
+  $("cn-close").addEventListener("click", function () { notice(null); });
+
+  /* ---------- citation popover: one shared card for markers and chips ---------- */
+  var SRC = {
+    "migration-notes.md": { title: "Migration notes", where: "Knowledge base - section 2 of 5",
+      snip: "Snapshot the collection and restore it on the target before decommissioning the source. A restore that has not been tested is not a backup." },
+    "embedding-config.md": { title: "Embedding configuration", where: "Knowledge base - section 1 of 3",
+      snip: "Stored vectors are only comparable under the embedding model and version that produced them. Changing either requires a full re-embed." },
+    "announcement-style.md": { title: "Announcement style", where: "Knowledge base - section 4 of 4",
+      snip: "Lead with the affected service and the window in UTC. Keep rollback details out of the public copy." }
+  };
+  var pop = $("cite-pop"), popTimer = 0, held = null;
+  document.querySelectorAll(".cite-mark").forEach(function (m) { m.tabIndex = 0; m.setAttribute("role", "button"); });
+  function citeNum(e) { return (e.classList.contains("cite-chip") ? e.querySelector("b") : e).textContent.trim(); }
+  function citeOf(el) {
+    var turn = el.closest('[data-part="bubble-assist"]'); if (!turn) return null;
+    var n = citeNum(el);
+    var chip = Array.prototype.filter.call(turn.querySelectorAll(".cite-chip"), function (c) { return citeNum(c) === n; })[0];
+    if (!chip) return null;
+    var file = chip.lastChild.textContent.trim();
+    return { n: n, file: file, turn: turn, data: SRC[file] };
+  }
+  function clearActive() { document.querySelectorAll(".is-active").forEach(function (e) { e.classList.remove("is-active"); }); }
+  function showCite(el) {
+    var c = citeOf(el); if (!c || !c.data) return;
+    clearTimeout(popTimer); clearActive();
+    c.turn.querySelectorAll(".cite-mark, .cite-chip").forEach(function (e) { if (citeNum(e) === c.n) e.classList.add("is-active"); });
+    $("cp-n").textContent = c.n; $("cp-title").textContent = c.data.title; $("cp-file").textContent = c.file;
+    $("cp-snip").textContent = c.data.snip; $("cp-where").textContent = c.data.where;
+    var r = el.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+    var left = Math.max(12, Math.min(r.left - 16, window.innerWidth - w - 12));
+    var top = r.top - h - 8; if (top < 56) top = r.bottom + 8;
+    pop.style.left = left + "px"; pop.style.top = top + "px"; pop.setAttribute("data-open", "");
+  }
+  function hideCite(now) {
+    clearTimeout(popTimer);
+    popTimer = setTimeout(function () { if (held) return; pop.removeAttribute("data-open"); clearActive(); }, now ? 0 : 140);
+  }
+  function citeTarget(e) { return e.target.closest ? e.target.closest(".cite-mark, .cite-chip") : null; }
+  thread.addEventListener("mouseover", function (e) { var t = citeTarget(e); if (t && !held) showCite(t); });
+  thread.addEventListener("mouseout", function (e) { if (citeTarget(e)) hideCite(); });
+  thread.addEventListener("focusin", function (e) { var t = citeTarget(e); if (t && !held) showCite(t); });
+  thread.addEventListener("focusout", function (e) { if (citeTarget(e)) hideCite(); });
+  thread.addEventListener("click", function (e) {
+    var t = citeTarget(e); if (!t) return; e.stopPropagation();
+    if (held === t) { held = null; hideCite(true); } else { held = null; showCite(t); held = t; }
+  });
+  thread.addEventListener("keydown", function (e) {
+    var t = citeTarget(e);
+    if (t && t.classList.contains("cite-mark") && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); t.click(); }
+  });
+  pop.addEventListener("mouseenter", function () { clearTimeout(popTimer); });
+  pop.addEventListener("mouseleave", function () { hideCite(); });
+  pop.addEventListener("click", function (e) { e.stopPropagation(); });
+  thread.addEventListener("scroll", function () { held = null; hideCite(true); });
+  document.addEventListener("click", function () { held = null; hideCite(true); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") { held = null; hideCite(true); } });
+
+  var sel = $("model-select"), btn = $("model-btn");
+  function menu(open) { if (open) sel.setAttribute("data-open", ""); else sel.removeAttribute("data-open"); btn.setAttribute("aria-expanded", open ? "true" : "false"); }
+  btn.addEventListener("click", function (e) { e.stopPropagation(); menu(!sel.hasAttribute("data-open")); });
+  document.addEventListener("click", function () { menu(false); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") { menu(false); body.removeAttribute("data-nav"); } });
+  sel.querySelectorAll(".model-opt").forEach(function (opt) {
+    opt.addEventListener("click", function () {
+      sel.querySelectorAll(".model-opt").forEach(function (o) { o.removeAttribute("aria-current"); });
+      opt.setAttribute("aria-current", "true");
+      var name = opt.firstChild.textContent;
+      $("model-name").textContent = name; $("ms-name").textContent = name;
+      document.querySelectorAll(".live-model").forEach(function (m) { m.textContent = name; });
+      menu(false); syncToggles();
+      if (opt.hasAttribute("data-loaded")) { modelState("memory"); notice(null); return; }
+      // choosing a model that is on disk: say so, then settle once it is in memory
+      modelState("loading"); Sky.setState("loading");
+      notice(name + " is loading from disk", "It will be ready shortly. You can keep typing.");
+      later(function () {
+        sel.querySelectorAll(".model-opt").forEach(function (o) { o.removeAttribute("data-loaded"); o.querySelector("em").textContent = "on disk"; });
+        opt.setAttribute("data-loaded", ""); opt.querySelector("em").textContent = "in memory";
+        modelState("memory"); notice(null); Sky.setState(body.dataset.state);
+      }, 4200);
+    });
+  });
+
+  $("nav-toggle").addEventListener("click", function () {
+    if (window.matchMedia("(max-width: 760px)").matches) body.toggleAttribute("data-nav");
+    else body.toggleAttribute("data-nav-collapsed");
+  });
+  $("scrim").addEventListener("click", function () { body.removeAttribute("data-nav"); });
+  if (window.matchMedia("(max-width: 760px)").matches) $("harness").removeAttribute("open");
+
+  setState("idle");
+  syncToggles();
+  Sky.start(); Stars.sync(); window.__proto.stars = Stars.stats;
+  window.__proto.scroll = function () { return { stuck: stuck, gliding: !!gliding, chase: !!chase, gap: Math.round(gap()) }; };
+  thread.scrollTop = 0; stuck = false; syncJump();
+})();
+</script>
+</body>
+</html>

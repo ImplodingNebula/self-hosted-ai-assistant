@@ -1,0 +1,120 @@
+/* =====================================================================
+   Auth surface - the theme-agnostic base layer.
+
+   One page: the sign-in card, the prototype's (docs/design/prototypes/
+   aurora-next.html, the "sign in" view): one card on the sky with the
+   boot's chart behind it, carrying the mark with its halo, the name in
+   tracked capitals, a serif headline with one lit word, one line of
+   lede, one 44px button and a foot line. A session that lapsed mid-task
+   says so in the headline and names the way back in the lede.
+
+   It is the boot's anatomy at card size - the same mark, the same name
+   line, the headline a step smaller - so what the reader meets before
+   the shell is one thing, not two. It carries the shared .btn /
+   .btn-primary primitives from chat.css rather than a button of its own.
+
+   Uses ONLY tier-2 (--s-*) tokens plus the shape tokens, never a raw
+   palette value. Kept as plain (unlayered) CSS like its sibling sheets,
+   so Aurora's @layer theme-flourish block can light the card's edge and
+   the mark's halo, and Minimal can leave the hairline to do the work -
+   which is all Minimal wants here, so it subtracts nothing and ships no
+   rule for this page.
+   ===================================================================== */
+
+[data-part="login"] {
+  min-height: 100dvh;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  /* Above whatever a theme paints behind the app (aurora's sky), and the
+     box its veil is cut to. */
+  position: relative;
+  z-index: 1;
+}
+
+.login-card {
+  position: relative;
+  width: min(100%, 23.5rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 36px 32px 28px;
+  text-align: center;
+  background: var(--c-login-bg);
+  border: 1px solid var(--c-login-border);
+  border-radius: var(--radius-l);
+  /* the card arrives, as every card on the sky does */
+  animation: enter 600ms var(--ease-entrance) both;
+}
+
+/* The mark: the boot's, a size down for a card. The halo is the theme's
+   (aurora lights it; minimal has none), the mark itself is the base's. */
+.login-mark {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 8px;
+  color: var(--s-accent);
+}
+.login-mark svg.i {
+  width: 100%;
+  height: 100%;
+  stroke-width: 1.2;
+  overflow: visible;
+}
+
+/* the name in tracked capitals, the boot's line */
+.login-name {
+  font-size: 12px;
+  line-height: 1.5;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--s-text-2);
+}
+
+/* the headline in the serif, with one word lit in the sky's colour */
+.login-head {
+  font-family: var(--font-prose);
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  color: var(--s-text);
+}
+.login-head em {
+  font-style: italic;
+  color: var(--s-accent);
+  /* an italic's last glyph leans past its box; a little air keeps it whole */
+  padding-right: 0.04em;
+}
+
+.login-lede {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--s-text-2);
+  /* Two short lines break evenly rather than leaving one word stranded. */
+  text-wrap: pretty;
+}
+
+.login-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  /* Above the 44px pointer-target floor; the shared .btn padding alone
+     leaves it short, and this is the one control on the page. */
+  min-height: 44px;
+  margin-top: 10px;
+}
+
+.login-foot {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--s-text-3);
+}

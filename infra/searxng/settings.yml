@@ -1,0 +1,41 @@
+# SearXNG configuration for the internal web-search sidecar.
+#
+# Inherits the image's built-in defaults (use_default_settings) and overrides
+# only what this deployment needs. Mounted read-only at /etc/searxng/settings.yml
+# by docker-compose. See docs/ARCHITECTURE.md section 7 (web search).
+use_default_settings: true
+
+server:
+  # Required to be non-empty. This instance is internal-only (no published
+  # port, no user accounts), so the key protects nothing sensitive; the image
+  # entrypoint replaces the "ultrasecretkey" placeholder with $SEARXNG_SECRET
+  # when that variable is set (see infra/.env.example).
+  secret_key: "ultrasecretkey"
+  # The backend reaches SearXNG over the internal network only; its own bot
+  # limiter would throttle that single client, so disable it here (no public
+  # exposure to protect).
+  limiter: false
+  image_proxy: false
+
+search:
+  # The backend SearchProvider queries ?format=json. The stock image serves
+  # only html and returns HTTP 403 for json until this list includes it - the
+  # single most common SearXNG-as-an-API misconfiguration.
+  formats:
+    - html
+    - json
+
+outgoing:
+  # SearXNG scrapes public engines over the network. The stock ~3s per-request
+  # timeout is tight on a slow or constrained connection: engines that would
+  # answer, just late, are dropped, so a search returns few or no results. A
+  # higher ceiling trades a larger worst-case search latency for far fewer
+  # timeout failures - results from fast engines still return promptly, only
+  # stragglers wait longer. This does NOT affect free-engine rate limits (a
+  # rate-limited engine is skipped regardless of timeout); it only recovers
+  # engines that were merely slow. NOTE: the backend's own client timeout
+  # (WEB_SEARCH_TIMEOUT_SECONDS, default 12s) must stay at or above this value,
+  # or it cuts off the SearXNG fan-out before these engines answer - if this is
+  # raised, raise that too.
+  request_timeout: 10.0
+  max_request_timeout: 15.0

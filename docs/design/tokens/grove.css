@@ -1,0 +1,86 @@
+/* =====================================================================
+   Grove - theme tokens
+   A reading nook by a window: moss, sage, cream, bark. Light only;
+   data-mode and data-accent are ignored. Depth comes from soft
+   green-gray shadows, never hard elevation. Leaf geometry (the one
+   tight 4px corner) and the flourish layer live in the theme's
+   flourish block; this file is the token contract.
+
+   Checked contrast ratios (WCAG relative-luminance formula):
+     text      #3e332a on bg-app  #f7f4e9  11.14:1  (AA 4.5 - pass)
+     text      #3e332a on panel   #e8edda  10.26:1  (AA 4.5 - pass)
+     text      #3e332a on raised  #fdfbf2  11.83:1  (AA 4.5 - pass)
+     text-2    #5f5546 on bg-app  #f7f4e9   6.63:1  (AA 4.5 - pass)
+     text-2    #5f5546 on panel   #e8edda   6.11:1  (AA 4.5 - pass)
+     text-3    #837767 on bg-app  #f7f4e9   3.97:1  (3.0 - pass)
+     text-3    #837767 on panel   #e8edda   3.66:1  (3.0 - pass)
+     on-accent #ffffff on accent  #4a7c59   4.86:1  (AA 4.5 - pass)
+     on-accent #ffffff on hover   #3c6a4a   6.26:1  (AA 4.5 - pass)
+     focus     #4a7c59 vs bg-app  #f7f4e9   4.42:1  (3.0 - pass)
+     focus     #4a7c59 vs raised  #fdfbf2   4.69:1  (3.0 - pass)
+     danger    #a5492f on bg-app  #f7f4e9   5.31:1  (AA 4.5 - pass)
+     text      #3e332a on bubble  #dfeadb   9.89:1  (AA 4.5 - pass)
+     code fg   #e2e6d5 on code bg #2e3328  10.19:1  (AA 4.5 - pass)
+   ===================================================================== */
+
+html[data-theme="grove"] {
+  /* tier 1 - primitives */
+  --p-cream-0: #f7f4e9; --p-cream-1: #fdfbf2;
+  --p-sage-0: #e8edda; --p-sage-1: #dce3cb;
+  --p-bark-0: #3e332a; --p-bark-1: #5f5546; --p-bark-2: #837767;
+  --p-moss-0: #4a7c59; --p-moss-1: #3c6a4a; --p-moss-tint: #dfeadb;
+  --p-line-0: #d9dcc6; --p-line-1: #b9c0a4;
+  --p-sun: #e3b95e;
+  --p-shade: 74, 94, 66; /* green-gray shadow ink (rgb triplet) */
+
+  /* tier 2 - semantic */
+  --s-bg-app: var(--p-cream-0);
+  --s-bg-panel: var(--p-sage-0);
+  --s-bg-raised: var(--p-cream-1);
+  --s-bg-inset: var(--p-sage-1);
+  --s-text: var(--p-bark-0);
+  --s-text-2: var(--p-bark-1);
+  --s-text-3: var(--p-bark-2);
+  --s-text-inverse: #f4f1e4;
+  --s-accent: var(--p-moss-0);
+  --s-accent-hover: var(--p-moss-1);
+  --s-on-accent: #ffffff;
+  --s-info: #46718c; --s-ok: #45794f; --s-warn: #98692a; --s-danger: #a5492f;
+  --s-border: var(--p-line-0);
+  --s-border-strong: var(--p-line-1);
+  --s-focus: var(--p-moss-0);
+  --s-on-status: #ffffff; /* on --s-info 5.3:1, on --s-danger 5.8:1 */
+  --s-scrim: rgba(0, 0, 0, .4);
+  --s-shadow: rgba(0, 0, 0, .14);
+
+  /* tier 3 - component (sparse overrides of base derivations) */
+  --c-sidebar-bg: var(--p-sage-0);
+  --c-bubble-user-bg: var(--p-moss-tint);
+  --c-bubble-user-fg: var(--s-text);
+  --c-thinking-bg: color-mix(in srgb, var(--p-sage-0) 45%, var(--s-bg-raised));
+  --c-thinking-rule: var(--s-accent);
+  --c-tool-bg: var(--s-bg-raised);
+  --c-citation-bg: color-mix(in srgb, var(--p-moss-tint) 55%, var(--s-bg-raised));
+  --c-code-bg: #2e3328;
+  --c-code-fg: #e2e6d5;
+
+  /* theme-specific: leaf geometry + green-gray depth */
+  --radius-leaf: 4px; /* the one tight corner on leaf shapes */
+  --grove-shadow-s: 0 1px 2px rgba(var(--p-shade), .10),
+                    0 3px 10px rgba(var(--p-shade), .07);
+  --grove-shadow-m: 0 2px 6px rgba(var(--p-shade), .12),
+                    0 14px 30px rgba(var(--p-shade), .16);
+  --grove-vine-leaf: color-mix(in srgb, var(--p-moss-0) 55%, var(--p-line-1));
+
+  /* shape + motion */
+  --radius-s: 6px; --radius-m: 12px; --radius-l: 16px;
+  --radius-bubble: 18px;
+  --clip-panel: none;
+  --dur-fast: 120ms; --dur-base: 200ms; --dur-slow: 320ms;
+  --ease-standard: cubic-bezier(.4,0,.2,1);
+  --ease-entrance: cubic-bezier(.16,1,.3,1);
+  --ease-spring: cubic-bezier(.34,1.4,.64,1);
+  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-prose: var(--font-ui);
+  --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+}

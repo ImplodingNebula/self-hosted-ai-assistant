@@ -1,0 +1,22 @@
+name: Feature request
+description: Propose a change or new capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What are you trying to do, and why is it hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [backend, rag, mcp, models, model-manager, chat, auth, attachments, frontend, ui, infra, ci, other]
+    validations:
+      required: true

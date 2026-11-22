@@ -1,0 +1,85 @@
+/* =====================================================================
+   Aurora - theme tokens
+   Ambient instrument: a deep indigo night under a slow-drifting aurora
+   mesh (violet / teal / magenta at low saturation); every panel is
+   frosted glass (dark translucent fill + backdrop blur + a 1px inner
+   light border), so text always sits on its own dark tint.
+
+   Modes / accents: dark only. data-mode and data-accent are ignored;
+   there are no variant selectors.
+
+   Checked contrast ratios (WCAG relative luminance, computed against
+   the solid app base #0b0d20 and the worst-case lit glass composite
+   #191c3b - a panel fill over the brightest mesh spot):
+     --s-text      #edeff9  on bg-app 16.8:1, on lit glass 14.4:1  (AA >= 4.5 pass)
+     --s-text-2    #a9b0d4  on bg-app  9.0:1, on lit glass  7.8:1  (AA >= 4.5 pass)
+     --s-text-3    #7e86b0  on bg-app  5.4:1, on lit glass  4.7:1  (>= 3 pass)
+     --s-on-accent #04261f  on accent #45e0c8  9.8:1               (AA >= 4.5 pass)
+     --s-accent    #45e0c8  vs bg-app 11.7:1 (as focus ring, >= 3 pass)
+     --s-danger    #e8546f  on bg-app  5.4:1 as text; badge glyphs use
+                            --s-on-status (night ink) at 5.4:1 (AA >= 4.5 pass)
+     --c-code-fg   #dfe4f5  on --c-code-bg #191d3c  12.7:1         (AA pass)
+   ===================================================================== */
+
+html[data-theme="aurora"] {
+  /* tier 1 - primitives */
+  --p-night-0: #0b0d20; --p-night-1: #12152e; --p-night-2: #191d3c;
+  --p-night-3: #060812;
+  --p-star-0: #edeff9; --p-star-1: #a9b0d4; --p-star-2: #7e86b0;
+  --p-aurora-violet: #8b78f6;
+  --p-aurora-teal: #45e0c8; --p-aurora-teal-bright: #6ceedd;
+  --p-aurora-magenta: #e670d6;
+
+  /* tier 2 - semantic */
+  --s-bg-app: var(--p-night-0);
+  --s-bg-panel: rgba(18, 21, 46, .62);
+  --s-bg-raised: rgba(25, 29, 60, .66);
+  --s-bg-inset: rgba(5, 7, 16, .55);
+  --s-text: var(--p-star-0);
+  --s-text-2: var(--p-star-1);
+  --s-text-3: var(--p-star-2);
+  --s-text-inverse: #0b0d20;
+  --s-accent: var(--p-aurora-teal);
+  --s-accent-hover: var(--p-aurora-teal-bright);
+  --s-on-accent: #04261f;
+  --s-info: #4f83e8; --s-ok: #5fe0a0; --s-warn: #efb964; --s-danger: #e8546f;
+  --s-border: rgba(255, 255, 255, .10);
+  --s-border-strong: rgba(255, 255, 255, .17);
+  --s-focus: var(--p-aurora-teal);
+  /* #fff reads only 3.7:1 / 3.5:1 on the info/danger fills; night ink
+     reads 5.3:1 on info, 5.4:1 on danger */
+  --s-on-status: var(--s-text-inverse);
+  --s-scrim: rgba(0, 0, 0, .4);
+  --s-shadow: rgba(0, 0, 0, .14);
+
+  /* tier 3 - component (sparse overrides of base derivations) */
+  --c-bubble-user-bg: rgba(69, 224, 200, .13);
+  --c-bubble-user-fg: var(--s-text);
+  --c-thinking-bg: rgba(16, 20, 44, .55);
+  --c-thinking-rule: var(--s-accent);
+  --c-tool-bg: rgba(18, 22, 48, .55);
+  --c-citation-bg: rgba(20, 24, 52, .55);
+  /* night-2: the code block sits RAISED on the glass, not recessed into it
+     (owner decision 2026-08-06; the app sheet adds the glass line on pre) */
+  --c-code-bg: #191d3c;
+  --c-code-fg: #dfe4f5;
+
+  /* aurora extras: the glass recipe + mesh ingredients */
+  --a-glass-blur: 14px;
+  --a-glass-fill: rgba(17, 20, 45, .62);
+  --a-glass-line: rgba(255, 255, 255, .08);
+  --a-glass-edge: inset 0 1px 0 rgba(255, 255, 255, .10),
+                  inset 0 0 0 1px rgba(255, 255, 255, .08);
+
+  /* shape + motion */
+  --radius-s: 8px; --radius-m: 12px; --radius-l: 16px;
+  --radius-bubble: 16px;
+  --clip-panel: none;
+  --dur-fast: 120ms; --dur-base: 200ms; --dur-slow: 320ms;
+  --ease-standard: cubic-bezier(.4,0,.2,1);
+  --ease-entrance: cubic-bezier(.16,1,.3,1);
+  --ease-spring: cubic-bezier(.34,1.4,.64,1);
+  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-prose: var(--font-ui);
+  --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+}

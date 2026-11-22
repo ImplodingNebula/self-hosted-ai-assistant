@@ -1,0 +1,24 @@
+# Normalize line endings so Windows/WSL/Linux contributors don't fight over CRLF.
+* text=auto eol=lf
+
+# Shell scripts and Dockerfiles must stay LF or they break inside containers.
+*.sh   text eol=lf
+Dockerfile text eol=lf
+*.Dockerfile text eol=lf
+
+# Windows-only scripts keep CRLF.
+*.ps1  text eol=crlf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# Treat these as binary (no EOL normalization, no diffing).
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.pdf  binary
+*.gguf binary
+*.bin  binary
+*.safetensors binary

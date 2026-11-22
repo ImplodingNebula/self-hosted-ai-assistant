@@ -1,0 +1,79 @@
+@import "tailwindcss";
+@import "./themes/tokens.base.css";
+@import "./themes/aurora.css";
+@import "./themes/minimal.css";
+@import "./themes/chat.css";
+@import "./themes/integrations.css";
+@import "./themes/console.css";
+@import "./themes/auth.css";
+
+/* Dark-variant bridge.
+   The existing pages still style themselves with raw zinc utilities and
+   `dark:` variants. By default Tailwind v4's `dark:` keys on the OS
+   (prefers-color-scheme), but the theme system drives color mode from
+   `data-mode` on <html> - which is NOT the OS for a single-mode theme
+   (Aurora is always dark). If `dark:` followed the OS, a light-OS user
+   under Aurora would get light zinc cards on the dark indigo shell.
+   Re-point `dark:` at the resolved theme mode so existing `dark:` styles
+   activate exactly when the active theme is dark: Aurora always, Minimal
+   per the OS/pin. Interim coherence until the restyle PRs migrate
+   components to the token utilities below. */
+@custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
+
+/* Tell the browser which scheme to render native UI in (scrollbars, form
+   controls, the canvas), keyed on the resolved theme mode - so a dark theme
+   gets dark scrollbars instead of the default light ones. */
+html[data-mode="dark"] {
+  color-scheme: dark;
+}
+html[data-mode="light"] {
+  color-scheme: light;
+}
+
+/* Semantic token aliases, so Tailwind utilities stay ergonomic on the
+   design tokens: bg-app / bg-panel / bg-raised / bg-inset, text-fg /
+   text-fg-2 / text-fg-3, text-accent (+ bg-/border-), border-border-line.
+   Anything not worth an alias uses the CSS var directly (var(--s-...)).
+   --font-sans maps to the theme UI font (Geist by default via next/font);
+   --font-mono stays the design token defined in tokens.base.css. */
+@theme inline {
+  --color-app: var(--s-bg-app);
+  --color-panel: var(--s-bg-panel);
+  --color-raised: var(--s-bg-raised);
+  --color-inset: var(--s-bg-inset);
+  --color-fg: var(--s-text);
+  --color-fg-2: var(--s-text-2);
+  --color-fg-3: var(--s-text-3);
+  --color-accent: var(--s-accent);
+  --color-border-line: var(--s-border);
+  --font-sans: var(--font-ui);
+}
+
+/* Tailwind v4 preflight gives buttons the platform default cursor (a change
+   from v3); clickable controls should read as clickable, per the upgrade
+   guide's recommended base-layer override. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+body {
+  background: var(--s-bg-app);
+  color: var(--s-text);
+  font-family: var(--font-ui);
+  /* Thread prose is the reading size (--text-body); the chrome steps down
+     from it via the --text-* scale (see tokens.base.css / DESIGN.md). */
+  font-size: var(--text-body);
+  /* The chrome's measure. The prose and the user bubble take the reading
+     measure (--text-body-line) themselves; inherited from here it reached
+     every row and chip and left them a pixel or two off their height. */
+  line-height: 1.5;
+  /* Ease the shell color when the theme or OS mode flips; the base sheet's
+     reduced-motion blanket collapses this to instant. */
+  transition: background-color var(--dur-slow) var(--ease-standard);
+}
+::selection {
+  background: color-mix(in srgb, var(--s-accent) 25%, transparent);
+}

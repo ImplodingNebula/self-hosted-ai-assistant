@@ -1,0 +1,31 @@
+{
+  "name": "@ai-chatbot-platform/api-types",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript types generated from the backend OpenAPI schema.",
+  "license": "MIT",
+  "main": "src/schema.ts",
+  "types": "src/schema.ts",
+  "scripts": {
+    "generate": "openapi-typescript openapi.json --output src/schema.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0"
+  },
+  "//overrides": [
+    "js-yaml is pinned forward past GHSA-52cp-r559-cp3m (quadratic CPU on YAML",
+    "merge-key chains) and GHSA-2883-xcg3-v3hh (unbounded CPU use on empty merge",
+    "sources). minimatch is forced to ^11.0.1: that clears the brace-expansion ReDoS",
+    "through its own range (brace-expansion has no override of its own; the",
+    "lockfile carries the patched release) and GHSA-g3hv-75wg-m249 (CPU use on",
+    "crafted glob parts), which has no fix below 11.0.1. All arrive through the",
+    "generator's own dependency chain, which pins versions npm audit fix",
+    "cannot reach, so an override is the only way to move them without",
+    "abandoning the generator. Drop these once openapi-typescript ships a",
+    "@redocly/openapi-core that depends on the patched versions itself."
+  ],
+  "overrides": {
+    "minimatch": "^11.0.1",
+    "js-yaml": "^4.3.2"
+  }
+}
