@@ -63,7 +63,7 @@ dependencies = [
     # botocore that boto3 does, so the API and the error types are the familiar
     # ones; the major ceiling is there because aiobotocore pins a narrow
     # botocore range and a major bump has broken that contract before.
-    "aiobotocore>=2.13,<3",
+    "aiobotocore>=2.13,<4",
 ]
 
 [dependency-groups]
